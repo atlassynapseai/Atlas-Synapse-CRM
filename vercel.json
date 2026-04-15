@@ -1,0 +1,7 @@
+{
+  "name": "atlas-synapse-crm",
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "outputDirectory": "dist",
+  "framework": "vite"
+}

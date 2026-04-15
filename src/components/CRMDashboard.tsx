@@ -4,8 +4,10 @@ import {
   ShieldAlert, ShieldCheck, AlertTriangle, Scale, Database, Activity,
   ChevronRight, Lock, Search, Users, TrendingUp, Briefcase, Mail,
   MoreVertical, Plus, Phone, Filter, CheckCircle2, XCircle, Clock,
-  ArrowUpRight, Layers
+  ArrowUpRight, Layers, Send, X
 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { sendEmail, EMAIL_TEMPLATES } from '../lib/brevo';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell, FunnelChart, Funnel, LabelList
@@ -89,14 +91,61 @@ function initials(name: string): string {
   return name.split(' ').map(n => n[0]).join('');
 }
 
-function saveLeads(leads: Lead[]) {
-  localStorage.setItem('atlas_crm_leads_v3', JSON.stringify(leads));
+async function fetchLeads(): Promise<Lead[]> {
+  try {
+    const { data, error } = await supabase
+      .from('leads')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error loading leads:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching leads:', err);
+    return [];
+  }
 }
 
-function loadLeads(): Lead[] {
+async function saveLead(lead: Lead): Promise<Lead | null> {
   try {
-    return JSON.parse(localStorage.getItem('atlas_crm_leads_v3') || '[]');
-  } catch { return []; }
+    const { data, error } = await supabase
+      .from('leads')
+      .upsert(lead)
+      .select();
+
+    if (error) {
+      console.error('Error saving lead:', error);
+      return null;
+    }
+
+    return data?.[0] || null;
+  } catch (err) {
+    console.error('Error saving lead:', err);
+    return null;
+  }
+}
+
+async function deleteLead(id: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('leads')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting lead:', error);
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Error deleting lead:', err);
+    return false;
+  }
 }
 
 // ── FORENSIC ANALYSIS ──
@@ -120,6 +169,19 @@ const RISK_ANALYSIS: RiskAnalysis = {
 const AUDITOR_NOTE = "Listen carefully. Your current infrastructure is a sieve. We're seeing data bleed that'll trigger a GDPR Article 33 notification before your morning coffee's cold. You've got UNPROTECTED PII flowing through non-deterministic nodes. That's a death sentence in the EU AI Act era. We're moving you to the DETERMINISTIC CLEAN ROOM. It's not a suggestion; it's a REQUIREMENT for corporate survival.";
 
 // ── SUB-COMPONENTS ──
+
+const Toast = ({ message, type }: { message: string; type: 'success' | 'error' | 'info' }) => {
+  const bgColor = type === 'success' ? 'bg-green-500/10 border-green-500/20' : type === 'error' ? 'bg-red-500/10 border-red-500/20' : 'bg-blue-500/10 border-blue-500/20';
+  const textColor = type === 'success' ? 'text-green-400' : type === 'error' ? 'text-red-400' : 'text-blue-400';
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+      className={`fixed top-4 right-4 px-4 py-3 rounded-lg border glass-card ${bgColor} z-[100]`}
+    >
+      <span className={`text-sm font-medium ${textColor}`}>{message}</span>
+    </motion.div>
+  );
+};
 
 const StatCard = ({ label, value, change, changeType, icon: Icon, accent }:
   { label: string; value: string; change: string; changeType: 'up' | 'down' | 'warn'; icon: any; accent: string }) => (
@@ -306,20 +368,63 @@ const ContactModal = ({ lead, onClose, onUpdate }: { lead: Lead; onClose: () => 
   const [stage, setStage] = useState(lead.stage);
   const [notes, setNotes] = useState(lead.notes || '');
   const [saved, setSaved] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<'initialOutreach' | 'followUp' | 'proposalSent'>('initialOutreach');
+  const [sendingEmail, setSendingEmail] = useState(false);
   const rs = lead.risk_score ?? calcRisk(lead);
 
-  const handleSave = () => {
-    const updated = {
+  const handleSave = async () => {
+    const updated: Lead = {
       ...lead, stage, notes,
       risk_score: calcRisk({ ...lead, stage, notes }),
       log: [...(lead.log || []),
-        ...(stage !== lead.stage ? [{ action: `Stage: ${lead.stage} → ${stage}`, time: new Date().toLocaleString(), color: STAGE_COLORS[stage] }] : []),
-        { action: 'Notes updated', time: new Date().toLocaleString(), color: '#7c3aed' }
+      ...(stage !== lead.stage ? [{ action: `Stage: ${lead.stage} → ${stage}`, time: new Date().toLocaleString(), color: STAGE_COLORS[stage] }] : []),
+      { action: 'Notes updated', time: new Date().toLocaleString(), color: '#7c3aed' }
       ]
     };
+    await saveLead(updated);
     onUpdate(updated);
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
+  };
+
+  const handleSendEmail = async () => {
+    setSendingEmail(true);
+    try {
+      const template = EMAIL_TEMPLATES[selectedTemplate];
+      if (!template) throw new Error('Invalid template');
+
+      const requestDate = new Date(lead.created_at).toLocaleDateString();
+      const emailData = template(lead.name, lead.company, requestDate);
+
+      const result = await sendEmail({
+        to: lead.email,
+        toName: lead.name,
+        subject: emailData.subject,
+        htmlContent: emailData.html
+      });
+
+      if (result.success) {
+        const templateName = selectedTemplate === 'initialOutreach' ? 'Initial Outreach' : selectedTemplate === 'followUp' ? 'Follow-Up' : 'Proposal Sent';
+        const updated: Lead = {
+          ...lead,
+          log: [...(lead.log || []), {
+            action: `Email sent: ${templateName}`,
+            time: new Date().toLocaleString(),
+            color: '#3b82f6'
+          }]
+        };
+        await saveLead(updated);
+        onUpdate(updated);
+        setEmailOpen(false);
+        setSendingEmail(false);
+      } else {
+        throw new Error('Failed to send email');
+      }
+    } catch (err) {
+      console.error('Error sending email:', err);
+      setSendingEmail(false);
+    }
   };
 
   return (
@@ -344,9 +449,20 @@ const ContactModal = ({ lead, onClose, onUpdate }: { lead: Lead; onClose: () => 
                 <p className="text-slate-400 text-sm">{lead.company}{lead.industry ? ` · ${lead.industry}` : ''}</p>
               </div>
             </div>
-            <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-lg transition-colors text-slate-500 hover:text-white">
-              <XCircle className="h-6 w-6" />
-            </button>
+            <div className="flex items-center gap-2">
+              <motion.button
+                onClick={() => setEmailOpen(true)}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="p-2 text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors rounded-lg border border-white/[0.06]"
+                title="Send email"
+              >
+                <Mail className="h-5 w-5" />
+              </motion.button>
+              <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-lg transition-colors text-slate-500 hover:text-white">
+                <XCircle className="h-6 w-6" />
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex items-center gap-2 text-sm text-slate-300">
@@ -423,6 +539,66 @@ const ContactModal = ({ lead, onClose, onUpdate }: { lead: Lead; onClose: () => 
             </div>
           )}
         </div>
+
+        {/* EMAIL COMPOSER OVERLAY */}
+        <AnimatePresence>
+          {emailOpen && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute inset-0 z-[70] flex items-center justify-center p-4 bg-atlas-bg/80 backdrop-blur-md rounded-3xl"
+            >
+              <motion.div
+                initial={{ scale: 0.92, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.92, y: 20 }}
+                className="glass-card w-full max-w-lg overflow-hidden"
+              >
+                <div className="p-5 border-b border-white/5 flex items-center justify-between">
+                  <h4 className="text-lg font-bold text-white">Send Email</h4>
+                  <button onClick={() => setEmailOpen(false)} className="p-1 text-slate-500 hover:text-white">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <div className="p-5 space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Template</label>
+                    <select
+                      value={selectedTemplate}
+                      onChange={(e) => setSelectedTemplate(e.target.value as any)}
+                      className="w-full bg-atlas-bg border border-white/5 rounded-lg px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-atlas-primary transition-colors"
+                    >
+                      <option value="initialOutreach">Initial Outreach</option>
+                      <option value="followUp">Follow-Up</option>
+                      <option value="proposalSent">Proposal Sent</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">To</label>
+                    <div className="text-sm text-slate-300 p-3 bg-atlas-bg/50 rounded-lg border border-white/5">{lead.name} ({lead.email})</div>
+                  </div>
+                  <div className="flex gap-3">
+                    <motion.button
+                      onClick={handleSendEmail}
+                      disabled={sendingEmail}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="gradient-btn flex items-center justify-center gap-2 flex-1 disabled:opacity-50"
+                    >
+                      <Send className="h-4 w-4" />
+                      {sendingEmail ? 'Sending...' : 'Send Email'}
+                    </motion.button>
+                    <motion.button
+                      onClick={() => setEmailOpen(false)}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="px-4 py-2.5 rounded-lg text-sm text-slate-400 hover:text-white border border-white/[0.06] transition-colors"
+                    >
+                      Cancel
+                    </motion.button>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </motion.div>
   );
@@ -431,14 +607,51 @@ const ContactModal = ({ lead, onClose, onUpdate }: { lead: Lead; onClose: () => 
 // ── MAIN COMPONENT ──
 const CRMDashboard = () => {
   const [tab, setTab] = useState<'overview' | 'contacts' | 'pipeline' | 'add' | 'audit'>('overview');
-  const [leads, setLeads] = useState<Lead[]>(loadLeads);
+  const [leads, setLeads] = useState<Lead[]>([]);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // Form state
   const [form, setForm] = useState({ name: '', email: '', company: '', phone: '', industry: '', ai_tools: '', stage: 'New' as PipelineStage, value: '', notes: '' });
 
-  useEffect(() => { saveLeads(leads); }, [leads]);
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      const data = await fetchLeads();
+      setLeads(data);
+      setLoading(false);
+    };
+    loadData();
+
+    // Subscribe to real-time changes
+    const subscription = supabase
+      .channel('leads-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'leads' },
+        (payload: any) => {
+          if (payload.eventType === 'INSERT') {
+            setLeads(prev => [payload.new, ...prev]);
+            showToast('New lead received!', 'success');
+          } else if (payload.eventType === 'UPDATE') {
+            setLeads(prev => prev.map(l => l.id === payload.new.id ? payload.new : l));
+          } else if (payload.eventType === 'DELETE') {
+            setLeads(prev => prev.filter(l => l.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
 
   const filtered = leads.filter(l => {
     if (!search) return true;
@@ -455,10 +668,10 @@ const CRMDashboard = () => {
     leads.reduce((acc: Record<string, number>, l) => { const k = l.industry || 'Other'; acc[k] = (acc[k] || 0) + 1; return acc; }, {})
   ).slice(0, 5).map(([name, value]) => ({ name, value }));
 
-  const addLead = () => {
+  const addLead = async () => {
     if (!form.name || !form.email || !form.company) return;
     const lead: Lead = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       name: form.name, email: form.email, company: form.company,
       phone: form.phone, industry: form.industry, ai_tools: form.ai_tools,
       stage: form.stage, value: parseInt(form.value) || 0, notes: form.notes,
@@ -466,14 +679,27 @@ const CRMDashboard = () => {
       log: [{ action: 'Lead registered via Atlas Forensic CRM', time: new Date().toLocaleString(), color: '#0ea5e9' }]
     };
     lead.risk_score = calcRisk(lead);
-    setLeads(prev => [lead, ...prev]);
-    setForm({ name: '', email: '', company: '', phone: '', industry: '', ai_tools: '', stage: 'New', value: '', notes: '' });
-    setTab('contacts');
+
+    const saved = await saveLead(lead);
+    if (saved) {
+      setLeads(prev => [saved, ...prev]);
+      setForm({ name: '', email: '', company: '', phone: '', industry: '', ai_tools: '', stage: 'New', value: '', notes: '' });
+      setTab('contacts');
+      showToast('Lead added successfully', 'success');
+    } else {
+      showToast('Failed to add lead', 'error');
+    }
   };
 
-  const updateLead = (updated: Lead) => {
-    setLeads(prev => prev.map(l => l.id === updated.id ? updated : l));
-    setSelectedLead(updated);
+  const updateLead = async (updated: Lead) => {
+    const saved = await saveLead(updated);
+    if (saved) {
+      setLeads(prev => prev.map(l => l.id === updated.id ? saved : l));
+      setSelectedLead(saved);
+      showToast('Lead updated successfully', 'success');
+    } else {
+      showToast('Failed to update lead', 'error');
+    }
   };
 
   const exportCSV = () => {
@@ -488,6 +714,11 @@ const CRMDashboard = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
+      {/* TOAST NOTIFICATIONS */}
+      <AnimatePresence>
+        {toast && <Toast message={toast.message} type={toast.type} />}
+      </AnimatePresence>
+
       {/* HEADER */}
       <header className="border-b border-white/[0.06] bg-atlas-bg/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
@@ -515,6 +746,9 @@ const CRMDashboard = () => {
             <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} onClick={exportCSV}
               className="p-2 text-slate-500 hover:text-white transition-colors text-xs border border-white/[0.06] rounded-lg px-3 font-mono"
             >↓ CSV</motion.button>
+            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} onClick={handleLogout}
+              className="p-2 text-slate-500 hover:text-red-400 transition-colors text-xs border border-white/[0.06] rounded-lg px-3 font-mono"
+            >Log Out</motion.button>
             <div className="h-9 w-9 rounded-full bg-slate-800 border border-white/[0.06] flex items-center justify-center text-xs font-bold text-atlas-primary">CGO</div>
           </div>
         </div>
@@ -522,272 +756,284 @@ const CRMDashboard = () => {
 
       {/* MAIN */}
       <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-8">
-        <AnimatePresence mode="wait">
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+              className="p-3 bg-atlas-primary/10 rounded-full border border-atlas-primary/20"
+            >
+              <Database className="h-6 w-6 text-atlas-primary" />
+            </motion.div>
+          </div>
+        ) : (
+          <AnimatePresence mode="wait">
 
-          {/* OVERVIEW */}
-          {tab === 'overview' && (
-            <motion.div key="overview" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-8">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                <StatCard label="Pipeline Value" value={fmtVal(totalValue)} change={leads.length > 0 ? 'Active' : 'Empty'} changeType="up" icon={TrendingUp} accent="linear-gradient(90deg,#10b981,transparent)" />
-                <StatCard label="Total Leads" value={String(leads.length)} change={leads.length > 0 ? `+${leads.length}` : '0'} changeType="up" icon={Users} accent="linear-gradient(90deg,#f97316,transparent)" />
-                <StatCard label="Closed Won" value={String(wonCount)} change={wonCount > 0 ? `${Math.round(wonCount / Math.max(leads.length, 1) * 100)}% rate` : '0%'} changeType="up" icon={CheckCircle2} accent="linear-gradient(90deg,#10b981,transparent)" />
-                <StatCard label="Avg Risk Score" value={String(avgRisk)} change={avgRisk >= 7 ? 'CRITICAL' : avgRisk >= 4 ? 'MODERATE' : 'LOW'} changeType={avgRisk >= 7 ? 'warn' : 'up'} icon={ShieldAlert} accent="linear-gradient(90deg,#ef4444,transparent)" />
-              </div>
+            {/* OVERVIEW */}
+            {tab === 'overview' && (
+              <motion.div key="overview" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                  <StatCard label="Pipeline Value" value={fmtVal(totalValue)} change={leads.length > 0 ? 'Active' : 'Empty'} changeType="up" icon={TrendingUp} accent="linear-gradient(90deg,#10b981,transparent)" />
+                  <StatCard label="Total Leads" value={String(leads.length)} change={leads.length > 0 ? `+${leads.length}` : '0'} changeType="up" icon={Users} accent="linear-gradient(90deg,#f97316,transparent)" />
+                  <StatCard label="Closed Won" value={String(wonCount)} change={wonCount > 0 ? `${Math.round(wonCount / Math.max(leads.length, 1) * 100)}% rate` : '0%'} changeType="up" icon={CheckCircle2} accent="linear-gradient(90deg,#10b981,transparent)" />
+                  <StatCard label="Avg Risk Score" value={String(avgRisk)} change={avgRisk >= 7 ? 'CRITICAL' : avgRisk >= 4 ? 'MODERATE' : 'LOW'} changeType={avgRisk >= 7 ? 'warn' : 'up'} icon={ShieldAlert} accent="linear-gradient(90deg,#ef4444,transparent)" />
+                </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 glass-card p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-base font-bold text-white">Pipeline by Stage</h3>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2 glass-card p-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="text-base font-bold text-white">Pipeline by Stage</h3>
+                    </div>
+                    <div className="h-[260px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={growthData} barSize={32}>
+                          <defs>
+                            {PIPELINE_STAGES.map(s => (
+                              <linearGradient key={s} id={`grad-${s}`} x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor={STAGE_COLORS[s]} stopOpacity={0.9} />
+                                <stop offset="100%" stopColor={STAGE_COLORS[s]} stopOpacity={0.4} />
+                              </linearGradient>
+                            ))}
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#ffffff04" vertical={false} />
+                          <XAxis dataKey="name" stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
+                          <YAxis stroke="#475569" fontSize={10} tickLine={false} axisLine={false} allowDecimals={false} />
+                          <Tooltip contentStyle={{ backgroundColor: '#0a0f24', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', fontFamily: 'monospace', fontSize: '11px' }} />
+                          <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                            {growthData.map((entry, i) => (
+                              <Cell key={i} fill={`url(#grad-${PIPELINE_STAGES[i]})`} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
-                  <div className="h-[260px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={growthData} barSize={32}>
-                        <defs>
-                          {PIPELINE_STAGES.map(s => (
-                            <linearGradient key={s} id={`grad-${s}`} x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor={STAGE_COLORS[s]} stopOpacity={0.9} />
-                              <stop offset="100%" stopColor={STAGE_COLORS[s]} stopOpacity={0.4} />
-                            </linearGradient>
-                          ))}
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#ffffff04" vertical={false} />
-                        <XAxis dataKey="name" stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#475569" fontSize={10} tickLine={false} axisLine={false} allowDecimals={false} />
-                        <Tooltip contentStyle={{ backgroundColor: '#0a0f24', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', fontFamily: 'monospace', fontSize: '11px' }} />
-                        <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-                          {growthData.map((entry, i) => (
-                            <Cell key={i} fill={`url(#grad-${PIPELINE_STAGES[i]})`} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
+
+                  <div className="glass-card p-6">
+                    <h3 className="text-base font-bold text-white mb-6">Leads by Industry</h3>
+                    <div className="h-[260px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={sourceData.length ? sourceData : [{ name: 'No Data', value: 1 }]} layout="vertical" barSize={18}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#ffffff04" horizontal={false} />
+                          <XAxis type="number" stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
+                          <YAxis dataKey="name" type="category" stroke="#475569" fontSize={9} tickLine={false} axisLine={false} width={80} />
+                          <Tooltip contentStyle={{ backgroundColor: '#0a0f24', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', fontFamily: 'monospace', fontSize: '11px' }} />
+                          <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                            {(sourceData.length ? sourceData : [{ name: 'No Data', value: 1 }]).map((_, i) => (
+                              <Cell key={i} fill={i % 2 === 0 ? '#f97316' : '#7c3aed'} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
                 </div>
 
-                <div className="glass-card p-6">
-                  <h3 className="text-base font-bold text-white mb-6">Leads by Industry</h3>
-                  <div className="h-[260px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={sourceData.length ? sourceData : [{ name: 'No Data', value: 1 }]} layout="vertical" barSize={18}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#ffffff04" horizontal={false} />
-                        <XAxis type="number" stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
-                        <YAxis dataKey="name" type="category" stroke="#475569" fontSize={9} tickLine={false} axisLine={false} width={80} />
-                        <Tooltip contentStyle={{ backgroundColor: '#0a0f24', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', fontFamily: 'monospace', fontSize: '11px' }} />
-                        <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                          {(sourceData.length ? sourceData : [{ name: 'No Data', value: 1 }]).map((_, i) => (
-                            <Cell key={i} fill={i % 2 === 0 ? '#f97316' : '#7c3aed'} />
+                {/* Recent leads */}
+                {leads.length > 0 && (
+                  <div className="glass-card overflow-hidden">
+                    <div className="p-5 border-b border-white/[0.06] flex items-center justify-between">
+                      <h3 className="text-base font-bold text-white">Recent Leads</h3>
+                      <button onClick={() => setTab('contacts')} className="text-xs text-atlas-primary hover:opacity-80 transition-opacity">View all →</button>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead><tr className="bg-white/[0.02] text-[10px] uppercase tracking-widest text-slate-500 font-bold">
+                          <th className="px-6 py-3">Lead</th><th className="px-6 py-3">Stage</th><th className="px-6 py-3">Risk</th><th className="px-6 py-3">Value</th>
+                        </tr></thead>
+                        <tbody className="divide-y divide-white/[0.04]">
+                          {leads.slice(0, 5).map(l => (
+                            <tr key={l.id} className="hover:bg-white/[0.02] transition-colors cursor-pointer" onClick={() => setSelectedLead(l)}>
+                              <td className="px-6 py-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="h-8 w-8 rounded-full bg-atlas-card border border-white/[0.06] flex items-center justify-center text-xs font-bold text-white">{initials(l.name)}</div>
+                                  <div><div className="text-sm font-semibold text-white">{l.name}</div><div className="text-[10px] text-slate-500">{l.company}</div></div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-3"><StagePill stage={l.stage} /></td>
+                              <td className="px-6 py-3"><RiskBar score={l.risk_score ?? calcRisk(l)} /></td>
+                              <td className="px-6 py-3 text-sm font-black text-atlas-primary">{fmtVal(l.value)}</td>
+                            </tr>
                           ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              </div>
+                )}
+              </motion.div>
+            )}
 
-              {/* Recent leads */}
-              {leads.length > 0 && (
+            {/* CONTACTS */}
+            {tab === 'contacts' && (
+              <motion.div key="contacts" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
                 <div className="glass-card overflow-hidden">
                   <div className="p-5 border-b border-white/[0.06] flex items-center justify-between">
-                    <h3 className="text-base font-bold text-white">Recent Leads</h3>
-                    <button onClick={() => setTab('contacts')} className="text-xs text-atlas-primary hover:opacity-80 transition-opacity">View all →</button>
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-base font-bold text-white">Strategic Contacts</h3>
+                      <div className="flex items-center gap-1.5 bg-atlas-bg border border-white/[0.06] rounded-lg px-2.5 py-1">
+                        <Filter className="h-3 w-3 text-slate-500" />
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">All</span>
+                      </div>
+                    </div>
+                    <button onClick={() => setTab('add')} className="gradient-btn flex items-center gap-2 text-xs py-2 px-4">
+                      <Plus className="h-3 w-3" /> Add Lead
+                    </button>
+                  </div>
+                  <div className="p-3 border-b border-white/[0.06]">
+                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, company, email..."
+                      className="w-full bg-atlas-bg border border-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-slate-200 outline-none focus:border-atlas-primary transition-colors font-mono placeholder-slate-600"
+                    />
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left">
                       <thead><tr className="bg-white/[0.02] text-[10px] uppercase tracking-widest text-slate-500 font-bold">
-                        <th className="px-6 py-3">Lead</th><th className="px-6 py-3">Stage</th><th className="px-6 py-3">Risk</th><th className="px-6 py-3">Value</th>
+                        <th className="px-6 py-3">Name</th><th className="px-6 py-3">Company</th>
+                        <th className="px-6 py-3">AI Tools</th><th className="px-6 py-3">Stage</th>
+                        <th className="px-6 py-3">Risk</th><th className="px-6 py-3 text-right">Value</th><th className="px-6 py-3"></th>
                       </tr></thead>
                       <tbody className="divide-y divide-white/[0.04]">
-                        {leads.slice(0, 5).map(l => (
-                          <tr key={l.id} className="hover:bg-white/[0.02] transition-colors cursor-pointer" onClick={() => setSelectedLead(l)}>
+                        {filtered.length === 0 ? (
+                          <tr><td colSpan={7} className="px-6 py-12 text-center text-slate-600 text-sm">
+                            {leads.length === 0 ? 'No leads yet. Register your first lead.' : 'No results match your search.'}
+                          </td></tr>
+                        ) : filtered.map(l => (
+                          <tr key={l.id} className="hover:bg-white/[0.02] transition-colors group cursor-pointer" onClick={() => setSelectedLead(l)}>
                             <td className="px-6 py-3">
                               <div className="flex items-center gap-3">
                                 <div className="h-8 w-8 rounded-full bg-atlas-card border border-white/[0.06] flex items-center justify-center text-xs font-bold text-white">{initials(l.name)}</div>
-                                <div><div className="text-sm font-semibold text-white">{l.name}</div><div className="text-[10px] text-slate-500">{l.company}</div></div>
+                                <div><div className="text-sm font-semibold text-white">{l.name}</div><div className="text-[10px] text-slate-500">{l.email}</div></div>
                               </div>
                             </td>
+                            <td className="px-6 py-3"><div className="text-sm text-slate-300">{l.company}</div></td>
+                            <td className="px-6 py-3"><div className="text-xs text-slate-500 max-w-[100px] truncate">{l.ai_tools || '—'}</div></td>
                             <td className="px-6 py-3"><StagePill stage={l.stage} /></td>
                             <td className="px-6 py-3"><RiskBar score={l.risk_score ?? calcRisk(l)} /></td>
-                            <td className="px-6 py-3 text-sm font-black text-atlas-primary">{fmtVal(l.value)}</td>
+                            <td className="px-6 py-3 text-right text-sm font-black text-atlas-primary">{fmtVal(l.value)}</td>
+                            <td className="px-6 py-3"><button className="p-1.5 text-slate-600 hover:text-white transition-colors"><MoreVertical className="h-4 w-4" /></button></td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                </div>
-              )}
-            </motion.div>
-          )}
-
-          {/* CONTACTS */}
-          {tab === 'contacts' && (
-            <motion.div key="contacts" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
-              <div className="glass-card overflow-hidden">
-                <div className="p-5 border-b border-white/[0.06] flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <h3 className="text-base font-bold text-white">Strategic Contacts</h3>
-                    <div className="flex items-center gap-1.5 bg-atlas-bg border border-white/[0.06] rounded-lg px-2.5 py-1">
-                      <Filter className="h-3 w-3 text-slate-500" />
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">All</span>
-                    </div>
-                  </div>
-                  <button onClick={() => setTab('add')} className="gradient-btn flex items-center gap-2 text-xs py-2 px-4">
-                    <Plus className="h-3 w-3" /> Add Lead
-                  </button>
-                </div>
-                <div className="p-3 border-b border-white/[0.06]">
-                  <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, company, email..."
-                    className="w-full bg-atlas-bg border border-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-slate-200 outline-none focus:border-atlas-primary transition-colors font-mono placeholder-slate-600"
-                  />
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead><tr className="bg-white/[0.02] text-[10px] uppercase tracking-widest text-slate-500 font-bold">
-                      <th className="px-6 py-3">Name</th><th className="px-6 py-3">Company</th>
-                      <th className="px-6 py-3">AI Tools</th><th className="px-6 py-3">Stage</th>
-                      <th className="px-6 py-3">Risk</th><th className="px-6 py-3 text-right">Value</th><th className="px-6 py-3"></th>
-                    </tr></thead>
-                    <tbody className="divide-y divide-white/[0.04]">
-                      {filtered.length === 0 ? (
-                        <tr><td colSpan={7} className="px-6 py-12 text-center text-slate-600 text-sm">
-                          {leads.length === 0 ? 'No leads yet. Register your first lead.' : 'No results match your search.'}
-                        </td></tr>
-                      ) : filtered.map(l => (
-                        <tr key={l.id} className="hover:bg-white/[0.02] transition-colors group cursor-pointer" onClick={() => setSelectedLead(l)}>
-                          <td className="px-6 py-3">
-                            <div className="flex items-center gap-3">
-                              <div className="h-8 w-8 rounded-full bg-atlas-card border border-white/[0.06] flex items-center justify-center text-xs font-bold text-white">{initials(l.name)}</div>
-                              <div><div className="text-sm font-semibold text-white">{l.name}</div><div className="text-[10px] text-slate-500">{l.email}</div></div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-3"><div className="text-sm text-slate-300">{l.company}</div></td>
-                          <td className="px-6 py-3"><div className="text-xs text-slate-500 max-w-[100px] truncate">{l.ai_tools || '—'}</div></td>
-                          <td className="px-6 py-3"><StagePill stage={l.stage} /></td>
-                          <td className="px-6 py-3"><RiskBar score={l.risk_score ?? calcRisk(l)} /></td>
-                          <td className="px-6 py-3 text-right text-sm font-black text-atlas-primary">{fmtVal(l.value)}</td>
-                          <td className="px-6 py-3"><button className="p-1.5 text-slate-600 hover:text-white transition-colors"><MoreVertical className="h-4 w-4" /></button></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="px-6 py-3 border-t border-white/[0.06] flex justify-between items-center">
-                  <span className="text-[10px] text-slate-600 font-mono">Showing {filtered.length} of {leads.length} leads</span>
-                  <button onClick={exportCSV} className="text-[10px] text-slate-500 hover:text-white transition-colors font-mono">↓ Export CSV</button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {/* PIPELINE */}
-          {tab === 'pipeline' && (
-            <motion.div key="pipeline" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-white font-display">Sales Pipeline</h2>
-                  <p className="text-slate-400 text-sm mt-1">Visualizing the flow of institutional growth.</p>
-                </div>
-                <div className="glass-card px-5 py-3 flex items-center gap-4">
-                  <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Total Value</div>
-                  <div className="text-xl font-black text-atlas-primary">{fmtVal(totalValue)}</div>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 glass-card p-6">
-                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 mb-5">Pipeline Velocity</h3>
-                  <PipelineBoard leads={leads} />
-                </div>
-                <div className="glass-card p-6">
-                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 mb-5">Funnel Conversion</h3>
-                  <PipelineFunnel leads={leads} />
-                  <div className="mt-5 space-y-3">
-                    <div className="flex items-center justify-between p-3 bg-white/[0.02] rounded-xl border border-white/[0.06]">
-                      <div className="flex items-center gap-2"><div className="h-2 w-2 rounded-full bg-emerald-500" /><span className="text-[10px] font-bold text-white uppercase tracking-widest">Closed Won</span></div>
-                      <span className="text-sm font-black text-emerald-500">{fmtVal(leads.filter(l => l.stage === 'Won').reduce((a, l) => a + l.value, 0))}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-white/[0.02] rounded-xl border border-white/[0.06]">
-                      <div className="flex items-center gap-2"><div className="h-2 w-2 rounded-full bg-atlas-primary" /><span className="text-[10px] font-bold text-white uppercase tracking-widest">In Progress</span></div>
-                      <span className="text-sm font-black text-atlas-primary">{fmtVal(leads.filter(l => !['Won', 'Lost'].includes(l.stage)).reduce((a, l) => a + l.value, 0))}</span>
-                    </div>
+                  <div className="px-6 py-3 border-t border-white/[0.06] flex justify-between items-center">
+                    <span className="text-[10px] text-slate-600 font-mono">Showing {filtered.length} of {leads.length} leads</span>
+                    <button onClick={exportCSV} className="text-[10px] text-slate-500 hover:text-white transition-colors font-mono">↓ Export CSV</button>
                   </div>
                 </div>
-              </div>
-            </motion.div>
-          )}
+              </motion.div>
+            )}
 
-          {/* ADD LEAD */}
-          {tab === 'add' && (
-            <motion.div key="add" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }}>
-              <div className="glass-card max-w-2xl overflow-hidden">
-                <div className="p-6 border-b border-white/[0.06] flex items-center justify-between">
-                  <h3 className="text-base font-bold text-white">Register New Lead</h3>
-                  <span className="px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider bg-atlas-primary/10 text-atlas-primary border border-atlas-primary/20">Forensic Intake</span>
+            {/* PIPELINE */}
+            {tab === 'pipeline' && (
+              <motion.div key="pipeline" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-white font-display">Sales Pipeline</h2>
+                    <p className="text-slate-400 text-sm mt-1">Visualizing the flow of institutional growth.</p>
+                  </div>
+                  <div className="glass-card px-5 py-3 flex items-center gap-4">
+                    <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Total Value</div>
+                    <div className="text-xl font-black text-atlas-primary">{fmtVal(totalValue)}</div>
+                  </div>
                 </div>
-                <div className="p-7">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    {[
-                      { id: 'name', label: 'Full Name *', placeholder: 'Jane Smith', type: 'text' },
-                      { id: 'email', label: 'Email *', placeholder: 'jane@company.com', type: 'email' },
-                      { id: 'company', label: 'Company Name *', placeholder: 'Acme Corp', type: 'text' },
-                      { id: 'phone', label: 'Phone Number', placeholder: '+1 (555) 000-0000', type: 'text' },
-                      { id: 'ai_tools', label: 'Current AI Tools Used', placeholder: 'ChatGPT, Zapier, Make...', type: 'text' },
-                      { id: 'value', label: 'Estimated Value ($)', placeholder: '10000', type: 'number' },
-                    ].map(f => (
-                      <div key={f.id}>
-                        <label className="block text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-1.5">{f.label}</label>
-                        <input type={f.type} placeholder={f.placeholder}
-                          value={(form as any)[f.id]} onChange={e => setForm(prev => ({ ...prev, [f.id]: e.target.value }))}
-                          className="w-full bg-atlas-bg border border-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-atlas-primary transition-colors font-mono placeholder-slate-600"
-                        />
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2 glass-card p-6">
+                    <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 mb-5">Pipeline Velocity</h3>
+                    <PipelineBoard leads={leads} />
+                  </div>
+                  <div className="glass-card p-6">
+                    <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 mb-5">Funnel Conversion</h3>
+                    <PipelineFunnel leads={leads} />
+                    <div className="mt-5 space-y-3">
+                      <div className="flex items-center justify-between p-3 bg-white/[0.02] rounded-xl border border-white/[0.06]">
+                        <div className="flex items-center gap-2"><div className="h-2 w-2 rounded-full bg-emerald-500" /><span className="text-[10px] font-bold text-white uppercase tracking-widest">Closed Won</span></div>
+                        <span className="text-sm font-black text-emerald-500">{fmtVal(leads.filter(l => l.stage === 'Won').reduce((a, l) => a + l.value, 0))}</span>
                       </div>
-                    ))}
-                    <div>
-                      <label className="block text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-1.5">Industry</label>
-                      <select value={form.industry} onChange={e => setForm(prev => ({ ...prev, industry: e.target.value }))}
-                        className="w-full bg-atlas-bg border border-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-atlas-primary transition-colors font-mono"
-                      >
-                        <option value="">Select industry...</option>
-                        {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
-                      </select>
+                      <div className="flex items-center justify-between p-3 bg-white/[0.02] rounded-xl border border-white/[0.06]">
+                        <div className="flex items-center gap-2"><div className="h-2 w-2 rounded-full bg-atlas-primary" /><span className="text-[10px] font-bold text-white uppercase tracking-widest">In Progress</span></div>
+                        <span className="text-sm font-black text-atlas-primary">{fmtVal(leads.filter(l => !['Won', 'Lost'].includes(l.stage)).reduce((a, l) => a + l.value, 0))}</span>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-1.5">Pipeline Stage</label>
-                      <select value={form.stage} onChange={e => setForm(prev => ({ ...prev, stage: e.target.value as PipelineStage }))}
-                        className="w-full bg-atlas-bg border border-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-atlas-primary transition-colors font-mono"
-                      >
-                        {PIPELINE_STAGES.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="mb-5">
-                    <label className="block text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-1.5">Initial Notes</label>
-                    <textarea value={form.notes} onChange={e => setForm(prev => ({ ...prev, notes: e.target.value }))}
-                      rows={3} placeholder="Discovery call notes, context, next steps..."
-                      className="w-full bg-atlas-bg border border-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-atlas-primary transition-colors font-mono resize-none placeholder-slate-600"
-                    />
-                  </div>
-                  <div className="flex gap-3">
-                    <motion.button onClick={addLead} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                      disabled={!form.name || !form.email || !form.company}
-                      className="gradient-btn flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                    >Register Lead <ChevronRight className="h-4 w-4" /></motion.button>
-                    <motion.button onClick={() => setForm({ name: '', email: '', company: '', phone: '', industry: '', ai_tools: '', stage: 'New', value: '', notes: '' })}
-                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                      className="px-5 py-2.5 rounded-full text-sm text-slate-400 hover:text-white border border-white/[0.06] hover:border-white/[0.12] transition-all"
-                    >Clear</motion.button>
                   </div>
                 </div>
-              </div>
-            </motion.div>
-          )}
+              </motion.div>
+            )}
 
-          {/* AUDIT */}
-          {tab === 'audit' && (
-            <motion.div key="audit" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }}>
-              <ForensicAuditView />
-            </motion.div>
-          )}
+            {/* ADD LEAD */}
+            {tab === 'add' && (
+              <motion.div key="add" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }}>
+                <div className="glass-card max-w-2xl overflow-hidden">
+                  <div className="p-6 border-b border-white/[0.06] flex items-center justify-between">
+                    <h3 className="text-base font-bold text-white">Register New Lead</h3>
+                    <span className="px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider bg-atlas-primary/10 text-atlas-primary border border-atlas-primary/20">Forensic Intake</span>
+                  </div>
+                  <div className="p-7">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      {[
+                        { id: 'name', label: 'Full Name *', placeholder: 'Jane Smith', type: 'text' },
+                        { id: 'email', label: 'Email *', placeholder: 'jane@company.com', type: 'email' },
+                        { id: 'company', label: 'Company Name *', placeholder: 'Acme Corp', type: 'text' },
+                        { id: 'phone', label: 'Phone Number', placeholder: '+1 (555) 000-0000', type: 'text' },
+                        { id: 'ai_tools', label: 'Current AI Tools Used', placeholder: 'ChatGPT, Zapier, Make...', type: 'text' },
+                        { id: 'value', label: 'Estimated Value ($)', placeholder: '10000', type: 'number' },
+                      ].map(f => (
+                        <div key={f.id}>
+                          <label className="block text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-1.5">{f.label}</label>
+                          <input type={f.type} placeholder={f.placeholder}
+                            value={(form as any)[f.id]} onChange={e => setForm(prev => ({ ...prev, [f.id]: e.target.value }))}
+                            className="w-full bg-atlas-bg border border-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-atlas-primary transition-colors font-mono placeholder-slate-600"
+                          />
+                        </div>
+                      ))}
+                      <div>
+                        <label className="block text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-1.5">Industry</label>
+                        <select value={form.industry} onChange={e => setForm(prev => ({ ...prev, industry: e.target.value }))}
+                          className="w-full bg-atlas-bg border border-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-atlas-primary transition-colors font-mono"
+                        >
+                          <option value="">Select industry...</option>
+                          {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-1.5">Pipeline Stage</label>
+                        <select value={form.stage} onChange={e => setForm(prev => ({ ...prev, stage: e.target.value as PipelineStage }))}
+                          className="w-full bg-atlas-bg border border-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-atlas-primary transition-colors font-mono"
+                        >
+                          {PIPELINE_STAGES.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="mb-5">
+                      <label className="block text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-1.5">Initial Notes</label>
+                      <textarea value={form.notes} onChange={e => setForm(prev => ({ ...prev, notes: e.target.value }))}
+                        rows={3} placeholder="Discovery call notes, context, next steps..."
+                        className="w-full bg-atlas-bg border border-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-atlas-primary transition-colors font-mono resize-none placeholder-slate-600"
+                      />
+                    </div>
+                    <div className="flex gap-3">
+                      <motion.button onClick={addLead} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                        disabled={!form.name || !form.email || !form.company}
+                        className="gradient-btn flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >Register Lead <ChevronRight className="h-4 w-4" /></motion.button>
+                      <motion.button onClick={() => setForm({ name: '', email: '', company: '', phone: '', industry: '', ai_tools: '', stage: 'New', value: '', notes: '' })}
+                        whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                        className="px-5 py-2.5 rounded-full text-sm text-slate-400 hover:text-white border border-white/[0.06] hover:border-white/[0.12] transition-all"
+                      >Clear</motion.button>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
 
-        </AnimatePresence>
+            {/* AUDIT */}
+            {tab === 'audit' && (
+              <motion.div key="audit" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }}>
+                <ForensicAuditView />
+              </motion.div>
+            )}
+
+          </AnimatePresence>
+        )}
       </main>
 
       {/* FOOTER */}
