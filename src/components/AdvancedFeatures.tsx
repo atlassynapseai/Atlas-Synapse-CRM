@@ -90,8 +90,8 @@ export const AdvancedAnalytics = ({ leads }: { leads: any[] }) => {
                 <div className={`p-3 rounded-lg bg-gradient-to-br ${metric.color} bg-opacity-10`}>
                   <Icon className="h-5 w-5" style={{
                     color: metric.color.includes('green') ? '#10b981' :
-                           metric.color.includes('blue') ? '#3b82f6' :
-                           metric.color.includes('purple') ? '#8b5cf6' : '#f97316'
+                      metric.color.includes('blue') ? '#3b82f6' :
+                        metric.color.includes('purple') ? '#8b5cf6' : '#f97316'
                   }} />
                 </div>
                 <motion.div

@@ -169,11 +169,10 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                   setError('');
                   setSuccess('');
                 }}
-                className={`flex-1 py-2 px-4 rounded-md transition-all text-sm font-semibold ${
-                  view === 'signin'
+                className={`flex-1 py-2 px-4 rounded-md transition-all text-sm font-semibold ${view === 'signin'
                     ? 'bg-atlas-primary/20 text-atlas-primary'
                     : 'text-slate-400 hover:text-slate-200'
-                }`}
+                  }`}
               >
                 Sign In
               </button>
@@ -183,11 +182,10 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                   setError('');
                   setSuccess('');
                 }}
-                className={`flex-1 py-2 px-4 rounded-md transition-all text-sm font-semibold ${
-                  view === 'signup'
+                className={`flex-1 py-2 px-4 rounded-md transition-all text-sm font-semibold ${view === 'signup'
                     ? 'bg-atlas-primary/20 text-atlas-primary'
                     : 'text-slate-400 hover:text-slate-200'
-                }`}
+                  }`}
               >
                 Sign Up
               </button>

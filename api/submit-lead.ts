@@ -201,6 +201,7 @@ export default async function handler(req: any, res: any) {
       stage: 'New',
       value: 0,
       risk_score: riskScore,
+      source: 'priority_access',
       notes: `Role: ${sanitized.role || 'N/A'}\nHow heard: ${sanitized.hearAboutUs || 'N/A'}\nCurrency: ${sanitized.currency || 'USD'}\n\nAdditional details: ${sanitized.additionalDetails || 'None'}`,
       log: [
         {

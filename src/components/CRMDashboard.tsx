@@ -33,6 +33,7 @@ export interface Lead {
   value: number;
   notes?: string;
   risk_score?: number;
+  source?: 'priority_access' | 'manual_add' | 'other';
   created_at: string;
   log: LogEntry[];
 }
@@ -229,6 +230,20 @@ const StagePill = ({ stage }: { stage: PipelineStage }) => {
   return (
     <span className={cn('px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border', colorMap[stage])}>
       {stage}
+    </span>
+  );
+};
+
+const SourceBadge = ({ source }: { source?: string }) => {
+  const sourceMap: Record<string, { bg: string; text: string; label: string }> = {
+    priority_access: { bg: 'bg-blue-500/10', text: 'text-blue-400 border-blue-500/20', label: '📧 Priority Access' },
+    manual_add: { bg: 'bg-purple-500/10', text: 'text-purple-400 border-purple-500/20', label: '✋ Manual Entry' },
+    other: { bg: 'bg-slate-500/10', text: 'text-slate-400 border-slate-500/20', label: '📌 Other' },
+  };
+  const config = sourceMap[source || 'other'] || sourceMap.other;
+  return (
+    <span className={cn('px-2 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider border', config.text)}>
+      {config.label}
     </span>
   );
 };
@@ -533,6 +548,9 @@ const ContactModal = ({ lead, onClose, onUpdate }: { lead: Lead; onClose: () => 
                 <Layers className="h-4 w-4 text-atlas-primary" />{lead.ai_tools}
               </div>
             )}
+            <div className="col-span-2">
+              <SourceBadge source={lead.source} />
+            </div>
           </div>
         </div>
 
@@ -667,6 +685,7 @@ const CRMDashboard = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [search, setSearch] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'priority_access' | 'manual_add'>('all');
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -716,9 +735,14 @@ const CRMDashboard = () => {
   };
 
   const filtered = leads.filter(l => {
-    if (!search) return true;
-    const s = search.toLowerCase();
-    return l.name.toLowerCase().includes(s) || l.company.toLowerCase().includes(s) || l.email.toLowerCase().includes(s);
+    const matchesSearch = !search ||
+      l.name.toLowerCase().includes(search.toLowerCase()) ||
+      l.company.toLowerCase().includes(search.toLowerCase()) ||
+      l.email.toLowerCase().includes(search.toLowerCase());
+
+    const matchesSource = sourceFilter === 'all' || l.source === sourceFilter;
+
+    return matchesSearch && matchesSource;
   });
 
   const totalValue = leads.filter(l => l.stage !== 'Lost').reduce((a, l) => a + (l.value || 0), 0);
@@ -737,6 +761,7 @@ const CRMDashboard = () => {
       name: form.name, email: form.email, company: form.company,
       phone: form.phone, industry: form.industry, ai_tools: form.ai_tools,
       stage: form.stage, value: parseInt(form.value) || 0, notes: form.notes,
+      source: 'manual_add',
       created_at: new Date().toISOString(),
       log: [{ action: 'Lead registered via Atlas Forensic CRM', time: new Date().toLocaleString(), color: '#0ea5e9' }]
     };
@@ -932,9 +957,19 @@ const CRMDashboard = () => {
                   <div className="p-5 border-b border-white/[0.06] flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <h3 className="text-base font-bold text-white">Strategic Contacts</h3>
-                      <div className="flex items-center gap-1.5 bg-atlas-bg border border-white/[0.06] rounded-lg px-2.5 py-1">
-                        <Filter className="h-3 w-3 text-slate-500" />
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">All</span>
+                      <div className="flex items-center gap-2">
+                        {(['all', 'priority_access', 'manual_add'] as const).map(f => (
+                          <motion.button key={f} onClick={() => setSourceFilter(f)} whileHover={{ scale: 1.05 }}
+                            className={cn(
+                              'px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all',
+                              sourceFilter === f
+                                ? 'bg-atlas-primary/20 text-atlas-primary border border-atlas-primary/40'
+                                : 'bg-white/5 text-slate-400 border border-white/[0.06] hover:border-white/[0.12]'
+                            )}
+                          >
+                            {f === 'all' ? '📊 All' : f === 'priority_access' ? '📧 Forms' : '✋ Manual'}
+                          </motion.button>
+                        ))}
                       </div>
                     </div>
                     <button onClick={() => setTab('add')} className="gradient-btn flex items-center gap-2 text-xs py-2 px-4">
@@ -950,7 +985,7 @@ const CRMDashboard = () => {
                     <table className="w-full text-left">
                       <thead><tr className="bg-white/[0.02] text-[10px] uppercase tracking-widest text-slate-500 font-bold">
                         <th className="px-6 py-3">Name</th><th className="px-6 py-3">Company</th>
-                        <th className="px-6 py-3">AI Tools</th><th className="px-6 py-3">Stage</th>
+                        <th className="px-6 py-3">Source</th><th className="px-6 py-3">Stage</th>
                         <th className="px-6 py-3">Risk</th><th className="px-6 py-3 text-right">Value</th><th className="px-6 py-3"></th>
                       </tr></thead>
                       <tbody className="divide-y divide-white/[0.04]">
@@ -967,7 +1002,7 @@ const CRMDashboard = () => {
                               </div>
                             </td>
                             <td className="px-6 py-3"><div className="text-sm text-slate-300">{l.company}</div></td>
-                            <td className="px-6 py-3"><div className="text-xs text-slate-500 max-w-[100px] truncate">{l.ai_tools || '—'}</div></td>
+                            <td className="px-6 py-3"><SourceBadge source={l.source} /></td>
                             <td className="px-6 py-3"><StagePill stage={l.stage} /></td>
                             <td className="px-6 py-3"><RiskBar score={l.risk_score ?? calcRisk(l)} /></td>
                             <td className="px-6 py-3 text-right text-sm font-black text-atlas-primary">{fmtVal(l.value)}</td>
