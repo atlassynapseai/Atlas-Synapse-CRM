@@ -287,14 +287,14 @@ const SourceBadge = ({ source }: { source?: string }) => {
 };
 
 const PipelineBoard = ({ leads }: { leads: Lead[] }) => (
-  <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 overflow-x-auto pb-4">
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 overflow-x-auto pb-4">
     {PIPELINE_STAGES.map(stage => {
       const stageLeads = leads.filter(l => l.stage === stage);
       return (
-        <div key={stage} className="min-w-[180px] space-y-3">
-          <div className="flex items-center justify-between px-1">
-            <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500">{stage}</h4>
-            <span className="text-[10px] font-bold bg-white/5 px-1.5 py-0.5 rounded text-slate-400">{stageLeads.length}</span>
+        <div key={stage} className="min-w-[220px] space-y-3">
+          <div className="flex items-center justify-between px-1 gap-2">
+            <h4 className="text-[9px] font-black uppercase tracking-wide text-slate-500 flex-1 truncate">{stage}</h4>
+            <span className="text-[9px] font-bold bg-white/5 px-1.5 py-0.5 rounded text-slate-400 whitespace-nowrap flex-shrink-0">{stageLeads.length}</span>
           </div>
           <div className="space-y-2">
             {stageLeads.map(lead => (
