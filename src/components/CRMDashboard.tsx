@@ -4,7 +4,7 @@ import {
   ShieldAlert, ShieldCheck, AlertTriangle, Scale, Database, Activity,
   ChevronRight, Lock, Search, Users, TrendingUp, Briefcase, Mail,
   MoreVertical, Plus, Phone, Filter, CheckCircle2, XCircle, Clock,
-  ArrowUpRight, Layers, Send, X
+  ArrowUpRight, Layers, Send, X, Zap, BarChart3, Eye
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { sendEmail, EMAIL_TEMPLATES } from '../lib/brevo';
@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { AdvancedAnalytics, ActivityTimeline, BulkActions, SkeletonCard, LeadComparison } from './AdvancedFeatures';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -291,73 +292,129 @@ const PipelineFunnel = ({ leads }: { leads: Lead[] }) => {
   );
 };
 
-const ForensicAuditView = () => {
-  const score = RISK_ANALYSIS.score;
-  const scoreColor = score > 7 ? '#ef4444' : score > 4 ? '#f97316' : '#10b981';
+const ForensicAuditView = ({ leads }: { leads: Lead[] }) => {
+  // Get all activity logs from all leads, sorted by most recent
+  const allActivities = leads
+    .flatMap(lead =>
+      (lead.log || []).map(entry => ({
+        leadId: lead.id,
+        leadName: lead.name,
+        leadCompany: lead.company,
+        leadEmail: lead.email,
+        ...entry
+      }))
+    )
+    .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+
+  const recentActivities = allActivities.slice(0, 50);
+  const totalActivities = allActivities.length;
+
   return (
     <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between border-b border-white/5 pb-6">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-3">
-            <ShieldAlert className="text-atlas-primary h-7 w-7" />
-            FORENSIC AUDIT: STOCHASTIC LEAK ANALYSIS
+            <Activity className="text-atlas-primary h-7 w-7" />
+            LEAD ACTIVITY AUDIT LOG
           </h2>
-          <p className="text-slate-400 text-sm mt-1">Lead Forensic Auditor: Julius @ Atlas Synapse</p>
+          <p className="text-slate-400 text-sm mt-1">Real-time tracking of all lead interactions and status changes</p>
         </div>
         <div className="text-right">
-          <div className="text-xs uppercase tracking-widest text-slate-500 font-bold mb-1">Risk Score</div>
-          <div className="text-5xl font-black" style={{ color: scoreColor }}>{score.toFixed(1)}<span className="text-2xl text-slate-600">/10</span></div>
+          <div className="text-xs uppercase tracking-widest text-slate-500 font-bold mb-1">Total Events</div>
+          <div className="text-4xl font-black text-atlas-primary">{totalActivities}</div>
         </div>
       </div>
-      <div className="glass-card p-6 bg-red-500/5 border-red-500/20">
-        <h3 className="text-xs font-black uppercase tracking-[0.3em] text-red-400 mb-3 flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4" /> AUDITOR'S MANDATORY DIRECTIVE
+
+      {/* Activity Timeline */}
+      <div className="glass-card p-6 border border-white/5">
+        <h3 className="text-sm font-bold uppercase tracking-wider text-white mb-6 flex items-center gap-2">
+          <Clock className="h-4 w-4 text-atlas-primary" />
+          Recent Events (Last 50)
         </h3>
-        <p className="text-base font-medium text-slate-100 leading-relaxed">"{AUDITOR_NOTE}"</p>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <div className="glass-card p-6 border-l-4 border-l-red-500">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-red-400 mb-4 flex items-center gap-2">
-            <Scale className="h-4 w-4" /> LEGAL LIABILITIES IDENTIFIED
-          </h3>
-          <ul className="space-y-3">
-            {RISK_ANALYSIS.liabilities.map((lib, i) => (
-              <li key={i} className="flex items-start gap-3 text-sm text-slate-200">
-                <div className="mt-2 h-1.5 w-1.5 rounded-full bg-red-500 shrink-0" />
-                {lib}
-              </li>
+
+        {recentActivities.length === 0 ? (
+          <div className="py-12 text-center">
+            <p className="text-slate-500 text-sm">No activity yet. Submit a form or contact a lead to start.</p>
+          </div>
+        ) : (
+          <div className="space-y-4 max-h-[600px] overflow-y-auto">
+            {recentActivities.map((activity, idx) => (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: idx * 0.02 }}
+                className="flex gap-4 pb-4 border-b border-white/5 last:border-b-0"
+              >
+                {/* Timeline dot */}
+                <div className="flex flex-col items-center">
+                  <div
+                    className="h-3 w-3 rounded-full mt-1"
+                    style={{ backgroundColor: activity.color || '#3b82f6' }}
+                  />
+                  {idx < recentActivities.length - 1 && (
+                    <div className="w-0.5 h-12 bg-gradient-to-b from-white/20 to-transparent" />
+                  )}
+                </div>
+
+                {/* Event details */}
+                <div className="flex-1 pt-0.5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-semibold text-white">
+                        {activity.action}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        <span className="font-mono">{activity.leadName}</span>
+                        {' '}
+                        <span className="text-slate-600">@</span>
+                        {' '}
+                        <span className="text-slate-500">{activity.leadCompany}</span>
+                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        📧 {activity.leadEmail}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-500">
+                        {new Date(activity.time).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
             ))}
-          </ul>
-        </div>
-        <div className="glass-card p-6 border-l-4 border-l-atlas-primary">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-atlas-primary mb-4 flex items-center gap-2">
-            <Activity className="h-4 w-4" /> STOCHASTIC LEAK VECTORS
-          </h3>
-          <ul className="space-y-3">
-            {RISK_ANALYSIS.stochasticLeaks.map((leak, i) => (
-              <li key={i} className="flex items-start gap-3 text-sm text-slate-200">
-                <div className="mt-2 h-1.5 w-1.5 rounded-full bg-atlas-primary shrink-0" />
-                {leak}
-              </li>
-            ))}
-          </ul>
-        </div>
+          </div>
+        )}
       </div>
-      <div className="glass-card p-8 bg-gradient-to-br from-atlas-card to-atlas-bg border-atlas-secondary/20">
-        <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
-          <Lock className="text-atlas-secondary h-6 w-6" /> DETERMINISTIC CLEAN ROOM: INITIATION
-        </h3>
-        <div className="bg-atlas-bg/60 p-4 rounded-xl border border-white/5 mb-6">
-          <p className="text-sm font-semibold text-atlas-primary uppercase tracking-widest mb-2">Final Mitigation Directive:</p>
-          <p className="text-slate-200 text-sm leading-relaxed">{RISK_ANALYSIS.mitigationStrategy}</p>
+
+      {/* Summary Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="glass-card p-4 border-l-4 border-l-blue-500">
+          <p className="text-xs uppercase tracking-wider text-blue-400 font-bold">Total Leads</p>
+          <p className="text-3xl font-black text-white mt-2">{leads.length}</p>
         </div>
-        <motion.button
-          whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-          className="gradient-btn w-full flex items-center justify-center gap-2 group py-3"
-        >
-          INITIATE TRANSFER TO DETERMINISTIC CLEAN ROOM
-          <ChevronRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-        </motion.button>
+        <div className="glass-card p-4 border-l-4 border-l-green-500">
+          <p className="text-xs uppercase tracking-wider text-green-400 font-bold">Avg Risk Score</p>
+          <p className="text-3xl font-black text-white mt-2">
+            {leads.length > 0
+              ? ((leads.reduce((sum, l) => sum + (l.risk_score || 0), 0) / leads.length) || 0).toFixed(1)
+              : '0'
+            }
+          </p>
+        </div>
+        <div className="glass-card p-4 border-l-4 border-l-purple-500">
+          <p className="text-xs uppercase tracking-wider text-purple-400 font-bold">Total Value</p>
+          <p className="text-3xl font-black text-white mt-2">
+            {fmtVal(leads.reduce((sum, l) => sum + (l.value || 0), 0))}
+          </p>
+        </div>
       </div>
     </motion.div>
   );
@@ -651,6 +708,11 @@ const CRMDashboard = () => {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+  };
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
   };
 
   const filtered = leads.filter(l => {
@@ -1028,7 +1090,7 @@ const CRMDashboard = () => {
             {/* AUDIT */}
             {tab === 'audit' && (
               <motion.div key="audit" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }}>
-                <ForensicAuditView />
+                <ForensicAuditView leads={leads} />
               </motion.div>
             )}
 

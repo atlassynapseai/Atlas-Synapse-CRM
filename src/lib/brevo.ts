@@ -6,6 +6,19 @@ if (!apiKey) {
   throw new Error('Missing Brevo API key in environment variables');
 }
 
+// HTML escape function to prevent template injection
+function escapeHtml(str: string): string {
+  if (!str) return '';
+  const map: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;',
+  };
+  return str.replace(/[&<>"']/g, (char) => map[char]);
+}
+
 export interface EmailParams {
   to: string;
   toName: string;
@@ -50,7 +63,7 @@ export const EMAIL_TEMPLATES = {
       <html>
         <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; line-height: 1.6; color: #333;">
           <div style="max-width: 600px; margin: 0 auto;">
-            <p>Hi ${leadName},</p>
+            <p>Hi ${escapeHtml(leadName)},</p>
             <p>Thank you for requesting priority access to Atlas Synapse!</p>
             <p>We're excited to help you bring trust and governance to your AI systems. Based on your submission, I'd love to schedule a 15-minute call to understand your current AI setup and show you how Atlas Synapse can help.</p>
             <p>Are you available this week for a quick call?</p>
@@ -66,13 +79,13 @@ export const EMAIL_TEMPLATES = {
   }),
 
   followUp: (leadName: string, company: string, requestDate: string) => ({
-    subject: `Following up - Atlas Synapse for ${company}`,
+    subject: `Following up - Atlas Synapse for ${escapeHtml(company)}`,
     html: `
       <html>
         <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; line-height: 1.6; color: #333;">
           <div style="max-width: 600px; margin: 0 auto;">
-            <p>Hi ${leadName},</p>
-            <p>I wanted to follow up on your priority access request from ${requestDate}.</p>
+            <p>Hi ${escapeHtml(leadName)},</p>
+            <p>I wanted to follow up on your priority access request from ${escapeHtml(requestDate)}.</p>
             <p>We've helped companies like yours reduce AI compliance risk by 80% while maintaining full auditability. I'd love to show you a quick demo.</p>
             <p>When works for a 15-minute call this week?</p>
             <p style="margin-top: 40px;">Best,<br/>
@@ -85,13 +98,13 @@ export const EMAIL_TEMPLATES = {
   }),
 
   proposalSent: (leadName: string, company: string) => ({
-    subject: `Atlas Synapse Proposal for ${company}`,
+    subject: `Atlas Synapse Proposal for ${escapeHtml(company)}`,
     html: `
       <html>
         <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; line-height: 1.6; color: #333;">
           <div style="max-width: 600px; margin: 0 auto;">
-            <p>Hi ${leadName},</p>
-            <p>As discussed, I've attached our proposal for ${company}'s AI governance needs.</p>
+            <p>Hi ${escapeHtml(leadName)},</p>
+            <p>As discussed, I've attached our proposal for ${escapeHtml(company)}'s AI governance needs.</p>
             <p><strong>Key highlights:</strong></p>
             <ul>
               <li>Full agent monitoring and performance tracking</li>
