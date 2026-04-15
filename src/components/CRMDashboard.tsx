@@ -732,15 +732,32 @@ const CRMDashboard = () => {
 
   useEffect(() => {
     const loadData = async () => {
-      setLoading(true);
-      const data = await fetchLeads();
-      setLeads(data);
-      setLoading(false);
+      try {
+        setLoading(true);
+        console.log('🔄 Starting data load...');
+        console.log('📊 Fetching from tables: leads, priority_access, waitlist, requests, request_priority_access');
+
+        const data = await fetchLeads();
+        console.log('✅ Data loaded:', data.length, 'leads');
+        console.log('📋 Lead sources:', data.map(l => l.source).reduce((acc, src) => {
+          acc[src || 'unknown'] = (acc[src || 'unknown'] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>));
+
+        setLeads(data);
+        setLoading(false);
+      } catch (err) {
+        console.error('❌ Error loading data:', err);
+        setLoading(false);
+      }
     };
+
     loadData();
 
     // Subscribe to real-time changes on all tables
     const tables = ['leads', 'priority_access', 'waitlist', 'requests', 'request_priority_access'];
+    console.log('📡 Setting up real-time subscriptions for:', tables);
+
     const subscriptions = tables.map(table =>
       supabase
         .channel(`${table}-changes`)
@@ -748,19 +765,24 @@ const CRMDashboard = () => {
           'postgres_changes',
           { event: '*', schema: 'public', table: table },
           async (payload: any) => {
+            console.log(`🔔 Change detected in ${table}:`, payload.eventType);
             // Reload all data when any table changes
             const data = await fetchLeads();
             setLeads(data);
 
             if (payload.eventType === 'INSERT') {
+              console.log(`✨ New entry in ${table}`);
               showToast(`New ${table} entry received!`, 'success');
             }
           }
         )
-        .subscribe()
+        .subscribe((status) => {
+          console.log(`📡 ${table} subscription status:`, status);
+        })
     );
 
     return () => {
+      console.log('🛑 Cleaning up subscriptions');
       subscriptions.forEach(sub => sub.unsubscribe());
     };
   }, []);
