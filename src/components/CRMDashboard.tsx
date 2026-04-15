@@ -95,17 +95,54 @@ function initials(name: string): string {
 
 async function fetchLeads(): Promise<Lead[]> {
   try {
-    const { data, error } = await supabase
-      .from('leads')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const tables = ['leads', 'priority_access', 'waitlist', 'requests', 'request_priority_access'];
+    const allLeads: Lead[] = [];
 
-    if (error) {
-      console.error('Error loading leads:', error);
-      return [];
+    // Try fetching from each table
+    for (const table of tables) {
+      try {
+        const { data, error } = await supabase
+          .from(table)
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!error && data) {
+          // Consolidate with source tracking
+          const sourceMap: Record<string, string> = {
+            leads: 'manual_add',
+            priority_access: 'priority_access',
+            request_priority_access: 'priority_access',
+            waitlist: 'waitlist',
+            requests: 'request_priority_access',
+          };
+
+          const leadsWithSource = data.map(item => ({
+            ...item,
+            source: item.source || sourceMap[table] || 'other',
+            _table: table, // Track original table for debugging
+          }));
+
+          allLeads.push(...leadsWithSource);
+        }
+      } catch (err) {
+        // Table might not exist, continue
+        console.debug(`Table ${table} not found or error:`, err);
+      }
     }
 
-    return data || [];
+    // Deduplicate by email + name (in case same person exists in multiple tables)
+    const seen = new Set<string>();
+    const deduplicated = allLeads.filter(lead => {
+      const key = `${lead.email}:${lead.name}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    // Sort by created_at descending
+    return deduplicated.sort((a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
   } catch (err) {
     console.error('Error fetching leads:', err);
     return [];
@@ -238,6 +275,7 @@ const SourceBadge = ({ source }: { source?: string }) => {
   const sourceMap: Record<string, { bg: string; text: string; label: string }> = {
     priority_access: { bg: 'bg-blue-500/10', text: 'text-blue-400 border-blue-500/20', label: '📧 Priority Access' },
     manual_add: { bg: 'bg-purple-500/10', text: 'text-purple-400 border-purple-500/20', label: '✋ Manual Entry' },
+    waitlist: { bg: 'bg-green-500/10', text: 'text-green-400 border-green-500/20', label: '📋 Waitlist' },
     other: { bg: 'bg-slate-500/10', text: 'text-slate-400 border-slate-500/20', label: '📌 Other' },
   };
   const config = sourceMap[source || 'other'] || sourceMap.other;
@@ -685,7 +723,7 @@ const CRMDashboard = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [search, setSearch] = useState('');
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'priority_access' | 'manual_add'>('all');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'priority_access' | 'manual_add' | 'waitlist'>('all');
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -701,27 +739,29 @@ const CRMDashboard = () => {
     };
     loadData();
 
-    // Subscribe to real-time changes
-    const subscription = supabase
-      .channel('leads-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'leads' },
-        (payload: any) => {
-          if (payload.eventType === 'INSERT') {
-            setLeads(prev => [payload.new, ...prev]);
-            showToast('New lead received!', 'success');
-          } else if (payload.eventType === 'UPDATE') {
-            setLeads(prev => prev.map(l => l.id === payload.new.id ? payload.new : l));
-          } else if (payload.eventType === 'DELETE') {
-            setLeads(prev => prev.filter(l => l.id !== payload.old.id));
+    // Subscribe to real-time changes on all tables
+    const tables = ['leads', 'priority_access', 'waitlist', 'requests', 'request_priority_access'];
+    const subscriptions = tables.map(table =>
+      supabase
+        .channel(`${table}-changes`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: table },
+          async (payload: any) => {
+            // Reload all data when any table changes
+            const data = await fetchLeads();
+            setLeads(data);
+
+            if (payload.eventType === 'INSERT') {
+              showToast(`New ${table} entry received!`, 'success');
+            }
           }
-        }
-      )
-      .subscribe();
+        )
+        .subscribe()
+    );
 
     return () => {
-      subscription.unsubscribe();
+      subscriptions.forEach(sub => sub.unsubscribe());
     };
   }, []);
 
@@ -958,7 +998,7 @@ const CRMDashboard = () => {
                     <div className="flex items-center gap-3">
                       <h3 className="text-base font-bold text-white">Strategic Contacts</h3>
                       <div className="flex items-center gap-2">
-                        {(['all', 'priority_access', 'manual_add'] as const).map(f => (
+                        {(['all', 'priority_access', 'manual_add', 'waitlist'] as const).map(f => (
                           <motion.button key={f} onClick={() => setSourceFilter(f)} whileHover={{ scale: 1.05 }}
                             className={cn(
                               'px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all',
@@ -967,7 +1007,7 @@ const CRMDashboard = () => {
                                 : 'bg-white/5 text-slate-400 border border-white/[0.06] hover:border-white/[0.12]'
                             )}
                           >
-                            {f === 'all' ? '📊 All' : f === 'priority_access' ? '📧 Forms' : '✋ Manual'}
+                            {f === 'all' ? '📊 All' : f === 'priority_access' ? '📧 Requests' : f === 'manual_add' ? '✋ Manual' : '📋 Waitlist'}
                           </motion.button>
                         ))}
                       </div>
