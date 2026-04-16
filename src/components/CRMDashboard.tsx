@@ -95,56 +95,18 @@ function initials(name: string): string {
 
 async function fetchLeads(): Promise<Lead[]> {
   try {
-    const tables = ['leads', 'priority_access', 'waitlist', 'requests', 'request_priority_access'];
-    const allLeads: Lead[] = [];
+    console.log('🔄 Fetching leads from API endpoint...');
+    const response = await fetch('/api/fetch-leads');
 
-    // Try fetching from each table
-    for (const table of tables) {
-      try {
-        const { data, error } = await supabase
-          .from(table)
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (!error && data) {
-          // Consolidate with source tracking
-          const sourceMap: Record<string, string> = {
-            leads: 'manual_add',
-            priority_access: 'priority_access',
-            request_priority_access: 'priority_access',
-            waitlist: 'waitlist',
-            requests: 'request_priority_access',
-          };
-
-          const leadsWithSource = data.map(item => ({
-            ...item,
-            source: item.source || sourceMap[table] || 'other',
-            _table: table, // Track original table for debugging
-          }));
-
-          allLeads.push(...leadsWithSource);
-        }
-      } catch (err) {
-        // Table might not exist, continue
-        console.debug(`Table ${table} not found or error:`, err);
-      }
+    if (!response.ok) {
+      throw new Error(`Failed to fetch leads: ${response.status}`);
     }
 
-    // Deduplicate by email + name (in case same person exists in multiple tables)
-    const seen = new Set<string>();
-    const deduplicated = allLeads.filter(lead => {
-      const key = `${lead.email}:${lead.name}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-    // Sort by created_at descending
-    return deduplicated.sort((a, b) =>
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
+    const { leads } = await response.json();
+    console.log('✅ Data loaded:', leads.length, 'leads');
+    return leads;
   } catch (err) {
-    console.error('Error fetching leads:', err);
+    console.error('❌ Error fetching leads:', err);
     return [];
   }
 }
