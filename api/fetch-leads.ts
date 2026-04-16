@@ -1,15 +1,18 @@
+import { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
-export async function GET(request: Request) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
   try {
     const supabaseUrl = process.env.VITE_SUPABASE_URL;
     const supabaseServiceRoleKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !supabaseServiceRoleKey) {
-      return new Response(
-        JSON.stringify({ error: 'Missing Supabase credentials' }),
-        { status: 500 }
-      );
+      console.error('[ERROR] Missing Supabase credentials');
+      return res.status(500).json({ error: 'Missing Supabase credentials' });
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
@@ -25,7 +28,12 @@ export async function GET(request: Request) {
           .select('*')
           .order('created_at', { ascending: false });
 
-        if (!error && data) {
+        if (error) {
+          console.error(`[ERROR] Table ${table}:`, error);
+          continue;
+        }
+
+        if (data) {
           const sourceMap: Record<string, string> = {
             leads: 'manual_add',
             priority_access: 'priority_access',
@@ -43,7 +51,7 @@ export async function GET(request: Request) {
           allLeads.push(...leadsWithSource);
         }
       } catch (err) {
-        console.error(`Error fetching from table ${table}:`, err);
+        console.error(`[ERROR] Exception fetching from table ${table}:`, err);
       }
     }
 
@@ -62,15 +70,10 @@ export async function GET(request: Request) {
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
 
-    return new Response(JSON.stringify({ leads: sorted }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    console.log(`[SUCCESS] Fetched ${sorted.length} leads`);
+    return res.status(200).json({ leads: sorted });
   } catch (error) {
-    console.error('Error fetching leads:', error);
-    return new Response(
-      JSON.stringify({ error: 'Failed to fetch leads' }),
-      { status: 500 }
-    );
+    console.error('[ERROR] Unexpected error fetching leads:', error);
+    return res.status(500).json({ error: 'Failed to fetch leads' });
   }
 }
