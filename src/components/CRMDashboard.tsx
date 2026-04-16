@@ -95,56 +95,16 @@ function initials(name: string): string {
 
 async function fetchLeads(): Promise<Lead[]> {
   try {
-    console.log('🔄 Fetching leads from Supabase...');
-    const tables = ['leads', 'priority_access', 'waitlist', 'requests', 'request_priority_access'];
-    const allLeads: Lead[] = [];
+    console.log('🔄 Fetching leads from API endpoint...');
+    const response = await fetch('/api/fetch-leads');
 
-    for (const table of tables) {
-      try {
-        const { data, error } = await supabase
-          .from(table)
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (error) {
-          console.error(`❌ Table ${table}:`, error);
-          continue;
-        }
-
-        if (data) {
-          const sourceMap: Record<string, string> = {
-            leads: 'manual_add',
-            priority_access: 'priority_access',
-            request_priority_access: 'priority_access',
-            waitlist: 'waitlist',
-            requests: 'request_priority_access',
-          };
-
-          const leadsWithSource = data.map(item => ({
-            ...item,
-            source: item.source || sourceMap[table] || 'other',
-            _table: table,
-          }));
-
-          allLeads.push(...leadsWithSource);
-        }
-      } catch (err) {
-        console.error(`❌ Error fetching from ${table}:`, err);
-      }
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`);
     }
 
-    const seen = new Set<string>();
-    const deduplicated = allLeads.filter(lead => {
-      const key = `${lead.email}:${lead.name}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-    console.log('✅ Data loaded:', deduplicated.length, 'leads');
-    return deduplicated.sort((a, b) =>
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
+    const { leads } = await response.json();
+    console.log('✅ Data loaded:', leads.length, 'leads');
+    return leads;
   } catch (err) {
     console.error('❌ Error fetching leads:', err);
     return [];
