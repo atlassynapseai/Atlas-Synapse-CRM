@@ -17,9 +17,26 @@
     font-family: "IBM Plex Mono", "JetBrains Mono", monospace;
   }
 
+  /* Light mode */
+  :root:not(.dark) {
+    --color-atlas-bg: #ffffff;
+    --color-atlas-card: #f5f5f5;
+    --color-atlas-primary: #f97316;
+    --color-atlas-secondary: #7c3aed;
+    --color-atlas-border: rgba(0, 0, 0, 0.1);
+  }
+
+  :root:not(.dark) body {
+    @apply bg-white text-slate-900;
+  }
+
   * {
     scrollbar-width: thin;
     scrollbar-color: #1e293b #050816;
+  }
+
+  :root:not(.dark) * {
+    scrollbar-color: #cbd5e1 #f5f5f5;
   }
 
   *::-webkit-scrollbar {
@@ -31,10 +48,18 @@
     background: #050816;
   }
 
+  :root:not(.dark) *::-webkit-scrollbar-track {
+    background: #f5f5f5;
+  }
+
   *::-webkit-scrollbar-thumb {
     background: linear-gradient(180deg, #f97316 0%, #7c3aed 100%);
     border-radius: 3px;
     border: 2px solid #050816;
+  }
+
+  :root:not(.dark) *::-webkit-scrollbar-thumb {
+    border: 2px solid #f5f5f5;
   }
 
   *::-webkit-scrollbar-thumb:hover {

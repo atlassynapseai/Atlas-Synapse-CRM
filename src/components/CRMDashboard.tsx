@@ -5,9 +5,10 @@ import {
   ShieldAlert, ShieldCheck, AlertTriangle, Scale, Database, Activity,
   ChevronRight, Lock, Search, Users, TrendingUp, Briefcase, Mail,
   MoreVertical, Plus, Phone, Filter, CheckCircle2, XCircle, Clock,
-  ArrowUpRight, Layers, Send, X, Zap, BarChart3, Eye
+  ArrowUpRight, Layers, Send, X, Zap, BarChart3, Eye, Moon, Sun
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useTheme } from '../lib/theme';
 import { sendEmail, sendCustomMessage, EMAIL_TEMPLATES } from '../lib/brevo';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -27,6 +28,26 @@ import { AdvancedFeaturesPanel } from './AdvancedFeaturesPanel';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
+}
+
+// Theme Toggle Component
+function ThemeToggle() {
+  const { isDark, toggleTheme } = useTheme();
+  return (
+    <motion.button
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+      onClick={toggleTheme}
+      className="p-2 rounded-lg border border-white/[0.06] hover:border-white/[0.15] transition-all"
+      title={isDark ? 'Light Mode' : 'Dark Mode'}
+    >
+      {isDark ? (
+        <Sun className="h-5 w-5 text-yellow-400" />
+      ) : (
+        <Moon className="h-5 w-5 text-slate-400" />
+      )}
+    </motion.button>
+  );
 }
 
 // ── TYPES ──
@@ -1085,6 +1106,7 @@ const CRMDashboard = () => {
           </nav>
 
           <div className="flex items-center gap-3">
+            <ThemeToggle />
             <div className="relative">
               <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} onClick={() => setShowCSVMenu(!showCSVMenu)}
                 className="p-2 text-slate-500 hover:text-white transition-colors text-xs border border-white/[0.06] rounded-lg px-3 font-mono flex items-center gap-2"
