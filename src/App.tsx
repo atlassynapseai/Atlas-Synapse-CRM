@@ -10,6 +10,8 @@ import Auth from './components/Auth';
 const ALLOWED_EMAILS = [
   'steve.george@atlassynapseai.com',
   'gloriabarsoum@atlassynapseai.com',
+  'company@atlassynapseai.com',
+  'mdahl@atlassynapseai.com',
 ];
 
 function App() {
