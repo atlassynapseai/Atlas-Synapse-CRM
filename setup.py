@@ -162,6 +162,17 @@ def setup_supabase_tables(supabase_url, service_key):
 
     print("✅ Supabase tables setup complete")
 
+def setup_vercel_env():
+    """Guide user to set Vercel environment variables"""
+    print("\n🔑 Vercel Environment Variables")
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print("\nRun these commands to set environment variables:\n")
+    print("  vercel env add VITE_SUPABASE_URL $SUPABASE_URL")
+    print("  vercel env add VITE_SUPABASE_ANON_KEY $SUPABASE_ANON_KEY")
+    print("  vercel env add VITE_SUPABASE_SERVICE_ROLE_KEY $SUPABASE_SERVICE_ROLE_KEY")
+    print("  vercel env add GEMINI_API_KEY $GEMINI_API_KEY")
+    print("\nOr configure manually in Vercel dashboard → Settings → Environment Variables")
+
 def deploy_vercel():
     """Deploy to Vercel"""
     print("\n🚀 Deploying to Vercel...")
@@ -187,12 +198,8 @@ def main():
     # Setup
     setup_supabase_tables(supabase_url, supabase_service_key)
 
-    print("\n🔑 Environment Variables Setup")
-    print("Configure these in Vercel dashboard or using:")
-    print("   vercel env add VITE_SUPABASE_URL <value>")
-    print("   vercel env add VITE_SUPABASE_ANON_KEY <value>")
-    print("   vercel env add VITE_SUPABASE_SERVICE_ROLE_KEY <value>")
-    print("   vercel env add GEMINI_API_KEY <value>")
+    # Guide user to set env vars (don't store in dict to avoid CodeQL warnings)
+    setup_vercel_env()
 
     # Deploy
     should_deploy = input("\n🚀 Deploy to Vercel now? (y/n): ").strip().lower()
