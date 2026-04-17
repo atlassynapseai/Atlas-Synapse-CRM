@@ -19,12 +19,33 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [isAuthorized, setIsAuthorized] = useState(false);
 
+  const triggerGmailAuth = async () => {
+    try {
+      // Check if Gmail is already connected
+      const response = await fetch('/api/check-gmail-status');
+      const data = await response.json();
+
+      // If not connected, start auth flow
+      if (!data.connected) {
+        window.location.href = `${window.location.origin}/api/gmail-auth-start`;
+      }
+    } catch (error) {
+      console.log('Gmail auto-connect skipped:', error);
+      // Silently fail - don't block CRM access
+    }
+  };
+
   useEffect(() => {
     // Check current session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session?.user?.email) {
-        setIsAuthorized(ALLOWED_EMAILS.includes(session.user.email));
+        const authorized = ALLOWED_EMAILS.includes(session.user.email);
+        setIsAuthorized(authorized);
+        // Auto-connect Gmail on login
+        if (authorized) {
+          triggerGmailAuth();
+        }
       }
       setLoading(false);
     });
@@ -35,7 +56,12 @@ function App() {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session?.user?.email) {
-        setIsAuthorized(ALLOWED_EMAILS.includes(session.user.email));
+        const authorized = ALLOWED_EMAILS.includes(session.user.email);
+        setIsAuthorized(authorized);
+        // Auto-connect Gmail when user logs in
+        if (authorized && _event === 'SIGNED_IN') {
+          triggerGmailAuth();
+        }
       } else {
         setIsAuthorized(false);
       }

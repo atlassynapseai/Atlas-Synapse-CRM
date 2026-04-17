@@ -1506,46 +1506,6 @@ const CRMDashboard = () => {
 
                 <div className="glass-card p-6">
                   <h3 className="text-base font-bold text-white mb-6 flex items-center gap-2">
-                    <Mail className="h-5 w-5 text-green-400" />
-                    📨 Gmail Reply Tracking
-                  </h3>
-                  <div className="space-y-4">
-                    <div className="p-4 bg-white/[0.02] rounded-lg border border-white/5">
-                      <div className="flex items-center justify-between mb-4">
-                        <span className="text-sm text-slate-400">Connection Status:</span>
-                        <span className="px-3 py-1 rounded-full text-xs bg-orange-500/10 text-orange-400 border border-orange-500/20 font-bold flex items-center gap-2">
-                          ⚠️ Not Connected
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500 mb-4">
-                        Connect your Gmail account to automatically detect and track email replies from leads.
-                      </p>
-                      <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => {
-                          window.location.href = `${window.location.origin}/api/gmail-auth-start`;
-                        }}
-                        className="w-full px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white text-sm font-semibold rounded-lg transition-all"
-                      >
-                        🔗 Connect Gmail Account
-                      </motion.button>
-                    </div>
-
-                    <div className="text-xs text-slate-500 p-3 bg-white/[0.01] rounded-lg border border-white/5">
-                      <strong className="text-slate-400">How it works:</strong>
-                      <ul className="mt-2 space-y-1 ml-3">
-                        <li>• Polls Gmail every 5 minutes for incoming emails</li>
-                        <li>• Automatically detects replies from leads</li>
-                        <li>• Creates notifications when replies arrive</li>
-                        <li>• Shows reply preview in email history</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="glass-card p-6">
-                  <h3 className="text-base font-bold text-white mb-6 flex items-center gap-2">
                     <Activity className="h-5 w-5 text-atlas-primary" />
                     Recent Lead Updates
                   </h3>
