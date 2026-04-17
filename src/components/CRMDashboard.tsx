@@ -95,60 +95,19 @@ function initials(name: string): string {
 
 async function fetchLeads(): Promise<Lead[]> {
   try {
-    console.log('🔄 Fetching leads via real-time...');
-    const tables = ['leads', 'priority_access', 'waitlist', 'requests', 'request_priority_access'];
-    const allLeads: Lead[] = [];
+    console.log('🔄 Fetching leads from API...');
+    const res = await fetch('/api/fetch-leads');
 
-    for (const table of tables) {
-      try {
-        // Use realtime-enabled query
-        const { data, error } = await supabase
-          .from(table)
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (error) {
-          console.warn(`⚠️ Table ${table}:`, error.message);
-          continue;
-        }
-
-        if (data && data.length > 0) {
-          const sourceMap: Record<string, string> = {
-            leads: 'manual_add',
-            priority_access: 'priority_access',
-            request_priority_access: 'priority_access',
-            waitlist: 'waitlist',
-            requests: 'request_priority_access',
-          };
-
-          const leadsWithSource = data.map(item => ({
-            ...item,
-            source: item.source || sourceMap[table] || 'other',
-            _table: table,
-          }));
-
-          allLeads.push(...leadsWithSource);
-          console.log(`✅ Loaded ${data.length} from ${table}`);
-        }
-      } catch (err) {
-        console.warn(`⚠️ Error with ${table}:`, err);
-      }
+    if (!res.ok) {
+      console.error('API error:', res.status, await res.text());
+      return [];
     }
 
-    const seen = new Set<string>();
-    const deduplicated = allLeads.filter(lead => {
-      const key = `${lead.email}:${lead.name}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-    const sorted = deduplicated.sort((a, b) =>
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
-
-    console.log('✅ Data loaded:', sorted.length, 'leads');
-    return sorted;
+    const json = await res.json();
+    const leads = json.leads || [];
+    console.log('✅ Data loaded:', leads.length, 'leads');
+    if (json.debug) console.log('📊 Debug info:', json.debug);
+    return leads;
   } catch (err) {
     console.error('❌ Error fetching leads:', err);
     return [];
