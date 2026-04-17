@@ -7,7 +7,7 @@ import {
   ArrowUpRight, Layers, Send, X, Zap, BarChart3, Eye
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { sendEmail, EMAIL_TEMPLATES } from '../lib/brevo';
+import { sendEmail, sendCustomMessage, EMAIL_TEMPLATES } from '../lib/brevo';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell, FunnelChart, Funnel, LabelList
@@ -504,6 +504,9 @@ const ContactModal = ({ lead, onClose, onUpdate }: { lead: Lead; onClose: () => 
   const [saved, setSaved] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<'initialOutreach' | 'followUp' | 'proposalSent'>('initialOutreach');
+  const [emailMode, setEmailMode] = useState<'template' | 'custom'>('template');
+  const [customEmailSubject, setCustomEmailSubject] = useState('');
+  const [customEmailBody, setCustomEmailBody] = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
   const rs = lead.risk_score ?? calcRisk(lead);
 
@@ -525,38 +528,76 @@ const ContactModal = ({ lead, onClose, onUpdate }: { lead: Lead; onClose: () => 
   const handleSendEmail = async () => {
     setSendingEmail(true);
     try {
-      const template = EMAIL_TEMPLATES[selectedTemplate];
-      if (!template) throw new Error('Invalid template');
+      if (emailMode === 'template') {
+        // Send template email
+        const template = EMAIL_TEMPLATES[selectedTemplate];
+        if (!template) throw new Error('Invalid template');
 
-      const requestDate = new Date(lead.created_at).toLocaleDateString();
-      const emailData = template(lead.name, lead.company, requestDate);
+        const requestDate = new Date(lead.created_at).toLocaleDateString();
+        const emailData = template(lead.name, lead.company, requestDate);
 
-      const result = await sendEmail({
-        to: lead.email,
-        toName: lead.name,
-        subject: emailData.subject,
-        htmlContent: emailData.html
-      });
+        const result = await sendEmail({
+          to: lead.email,
+          toName: lead.name,
+          subject: emailData.subject,
+          htmlContent: emailData.html
+        });
 
-      if (result.success) {
-        const templateName = selectedTemplate === 'initialOutreach' ? 'Initial Outreach' : selectedTemplate === 'followUp' ? 'Follow-Up' : 'Proposal Sent';
-        const updated: Lead = {
-          ...lead,
-          log: [...(lead.log || []), {
-            action: `Email sent: ${templateName}`,
-            time: new Date().toLocaleString(),
-            color: '#3b82f6'
-          }]
-        };
-        await saveLead(updated);
-        onUpdate(updated);
-        setEmailOpen(false);
-        setSendingEmail(false);
+        if (result.success) {
+          const templateName = selectedTemplate === 'initialOutreach' ? 'Initial Outreach' : selectedTemplate === 'followUp' ? 'Follow-Up' : 'Proposal Sent';
+          const updated: Lead = {
+            ...lead,
+            log: [...(lead.log || []), {
+              action: `📋 Email sent: ${templateName}`,
+              time: new Date().toLocaleString(),
+              color: '#3b82f6'
+            }]
+          };
+          await saveLead(updated);
+          onUpdate(updated);
+          setEmailOpen(false);
+          setSendingEmail(false);
+          showToast('Template email sent successfully', 'success');
+        } else {
+          throw new Error('Failed to send template email');
+        }
       } else {
-        throw new Error('Failed to send email');
+        // Send custom message
+        if (!customEmailSubject.trim() || !customEmailBody.trim()) {
+          throw new Error('Subject and message are required');
+        }
+
+        const result = await sendCustomMessage({
+          to: lead.email,
+          toName: lead.name,
+          subject: customEmailSubject,
+          body: customEmailBody,
+          senderName: 'Gloria Barsoum'
+        });
+
+        if (result.success) {
+          const updated: Lead = {
+            ...lead,
+            log: [...(lead.log || []), {
+              action: `✍️ Custom email sent: ${customEmailSubject}`,
+              time: new Date().toLocaleString(),
+              color: '#10b981'
+            }]
+          };
+          await saveLead(updated);
+          onUpdate(updated);
+          setEmailOpen(false);
+          setCustomEmailSubject('');
+          setCustomEmailBody('');
+          setSendingEmail(false);
+          showToast('Custom message sent successfully', 'success');
+        } else {
+          throw new Error('Failed to send custom message');
+        }
       }
     } catch (err) {
       console.error('Error sending email:', err);
+      showToast(err instanceof Error ? err.message : 'Failed to send email', 'error');
       setSendingEmail(false);
     }
   };
@@ -686,7 +727,7 @@ const ContactModal = ({ lead, onClose, onUpdate }: { lead: Lead; onClose: () => 
             >
               <motion.div
                 initial={{ scale: 0.92, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.92, y: 20 }}
-                className="glass-card w-full max-w-lg overflow-hidden"
+                className="glass-card w-full max-w-lg overflow-hidden max-h-[85vh] flex flex-col"
               >
                 <div className="p-5 border-b border-white/5 flex items-center justify-between">
                   <h4 className="text-lg font-bold text-white">Send Email</h4>
@@ -694,43 +735,116 @@ const ContactModal = ({ lead, onClose, onUpdate }: { lead: Lead; onClose: () => 
                     <X className="h-5 w-5" />
                   </button>
                 </div>
-                <div className="p-5 space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Template</label>
-                    <select
-                      value={selectedTemplate}
-                      onChange={(e) => setSelectedTemplate(e.target.value as any)}
-                      className="w-full bg-atlas-bg border border-white/5 rounded-lg px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-atlas-primary transition-colors"
-                    >
-                      <option value="initialOutreach">Initial Outreach</option>
-                      <option value="followUp">Follow-Up</option>
-                      <option value="proposalSent">Proposal Sent</option>
-                    </select>
-                  </div>
+
+                {/* Mode Toggle */}
+                <div className="p-4 border-b border-white/5 flex gap-2">
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    onClick={() => setEmailMode('template')}
+                    className={cn('flex-1 px-4 py-2 rounded-lg text-sm font-semibold transition-all',
+                      emailMode === 'template'
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                        : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                    )}
+                  >
+                    📋 Template
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    onClick={() => setEmailMode('custom')}
+                    className={cn('flex-1 px-4 py-2 rounded-lg text-sm font-semibold transition-all',
+                      emailMode === 'custom'
+                        ? 'bg-green-600 text-white shadow-lg shadow-green-600/30'
+                        : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                    )}
+                  >
+                    ✍️ Custom
+                  </motion.button>
+                </div>
+
+                <div className="p-5 space-y-4 overflow-y-auto flex-1">
+                  {emailMode === 'template' ? (
+                    <>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Select Template</label>
+                        <select
+                          value={selectedTemplate}
+                          onChange={(e) => setSelectedTemplate(e.target.value as any)}
+                          className="w-full bg-atlas-bg border border-white/5 rounded-lg px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-atlas-primary transition-colors"
+                        >
+                          <option value="initialOutreach">Initial Outreach</option>
+                          <option value="followUp">Follow-Up</option>
+                          <option value="proposalSent">Proposal Sent</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Preview</label>
+                        <div className="text-xs text-slate-400 p-3 bg-atlas-bg/50 rounded-lg border border-white/5 max-h-32 overflow-y-auto">
+                          {selectedTemplate === 'initialOutreach' && 'Initial outreach message introducing Atlas Synapse'}
+                          {selectedTemplate === 'followUp' && 'Follow-up on previous request'}
+                          {selectedTemplate === 'proposalSent' && 'Proposal review and next steps'}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Subject</label>
+                        <input
+                          type="text"
+                          value={customEmailSubject}
+                          onChange={(e) => setCustomEmailSubject(e.target.value)}
+                          placeholder="Email subject..."
+                          maxLength={100}
+                          className="w-full bg-atlas-bg border border-white/5 rounded-lg px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-atlas-primary transition-colors placeholder-slate-600"
+                        />
+                        <div className="text-xs text-slate-500 mt-1">{customEmailSubject.length}/100</div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Message</label>
+                        <textarea
+                          value={customEmailBody}
+                          onChange={(e) => setCustomEmailBody(e.target.value.slice(0, 500))}
+                          placeholder="Write your custom message..."
+                          maxLength={500}
+                          rows={6}
+                          className="w-full bg-atlas-bg border border-white/5 rounded-lg px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-atlas-primary transition-colors placeholder-slate-600 resize-none"
+                        />
+                        <div className="text-xs text-slate-500 mt-1">{customEmailBody.length}/500</div>
+                      </div>
+                    </>
+                  )}
+
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">To</label>
                     <div className="text-sm text-slate-300 p-3 bg-atlas-bg/50 rounded-lg border border-white/5">{lead.name} ({lead.email})</div>
                   </div>
-                  <div className="flex gap-3">
-                    <motion.button
-                      onClick={handleSendEmail}
-                      disabled={sendingEmail}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      className="gradient-btn flex items-center justify-center gap-2 flex-1 disabled:opacity-50"
-                    >
-                      <Send className="h-4 w-4" />
-                      {sendingEmail ? 'Sending...' : 'Send Email'}
-                    </motion.button>
-                    <motion.button
-                      onClick={() => setEmailOpen(false)}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      className="px-4 py-2.5 rounded-lg text-sm text-slate-400 hover:text-white border border-white/[0.06] transition-colors"
-                    >
-                      Cancel
-                    </motion.button>
-                  </div>
+                </div>
+
+                <div className="p-4 border-t border-white/5 flex gap-3">
+                  <motion.button
+                    onClick={handleSendEmail}
+                    disabled={sendingEmail || (emailMode === 'custom' && (!customEmailSubject.trim() || !customEmailBody.trim()))}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="gradient-btn flex items-center justify-center gap-2 flex-1 disabled:opacity-50"
+                  >
+                    <Send className="h-4 w-4" />
+                    {sendingEmail ? 'Sending...' : 'Send Email'}
+                  </motion.button>
+                  <motion.button
+                    onClick={() => {
+                      setEmailOpen(false);
+                      setCustomEmailSubject('');
+                      setCustomEmailBody('');
+                      setEmailMode('template');
+                    }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="px-4 py-2.5 rounded-lg text-sm text-slate-400 hover:text-white border border-white/[0.06] transition-colors"
+                  >
+                    Cancel
+                  </motion.button>
                 </div>
               </motion.div>
             </motion.div>
@@ -916,9 +1030,12 @@ const CRMDashboard = () => {
       <header className="border-b border-white/[0.06] bg-atlas-bg/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="h-10 w-10 bg-gradient-to-br from-atlas-primary to-atlas-secondary rounded-xl flex items-center justify-center shadow-lg shadow-atlas-primary/20">
-              <Database className="text-white h-5 w-5" />
-            </div>
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              className="h-10 w-10 bg-gradient-to-br from-atlas-primary to-atlas-secondary rounded-xl flex items-center justify-center shadow-lg shadow-atlas-primary/20 overflow-hidden"
+            >
+              <img src="/logo.png" alt="Atlas Synapse Logo" className="h-6 w-6 object-contain" />
+            </motion.div>
             <div>
               <h1 className="text-lg font-bold text-white tracking-tight font-display">ATLAS SYNAPSE</h1>
               <p className="text-[9px] uppercase tracking-[0.25em] text-atlas-primary font-black">Forensic Growth Engine · CGO Console</p>
@@ -1425,13 +1542,13 @@ const CRMDashboard = () => {
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2 opacity-40">
             <ShieldCheck className="h-4 w-4" />
-            <span className="text-xs font-bold uppercase tracking-widest">Verified Trust Layer v2.4.1</span>
+            <span className="text-xs font-bold uppercase tracking-widest">Verified Trust Layer</span>
           </div>
           <p className="text-xs text-slate-600">© 2026 Atlas Synapse LLC · All interactions monitored for stochastic leakage.</p>
           <div className="flex items-center gap-5">
-            {['GDPR Compliance', 'EU AI Act Registry', 'Privacy Policy'].map(l => (
-              <a key={l} href="#" className="text-xs text-slate-600 hover:text-white transition-colors">{l}</a>
-            ))}
+            <a href="/privacy/gdpr" className="text-xs text-slate-600 hover:text-white transition-colors">GDPR Compliance</a>
+            <a href="/privacy/ai-act" className="text-xs text-slate-600 hover:text-white transition-colors">EU AI Act Registry</a>
+            <a href="/privacy/policy" className="text-xs text-slate-600 hover:text-white transition-colors">Privacy Policy</a>
           </div>
         </div>
       </footer>
