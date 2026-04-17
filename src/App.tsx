@@ -13,6 +13,7 @@ const ALLOWED_EMAILS = [
   'gloriabarsoum@atlassynapseai.com',
   'company@atlassynapseai.com',
   'mdahl@atlassynapseai.com',
+  'julius@atlassynapseai.com',
 ];
 
 function App() {
