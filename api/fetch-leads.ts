@@ -37,65 +37,79 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log(`[INFO] Fetching from table: ${table}`);
 
         // Try with ordering first
-        let queryBuilder = supabase.from(table).select('*');
-        const { data, error } = await queryBuilder.order('created_at', { ascending: false });
+        let { data, error } = await supabase
+          .from(table)
+          .select('*')
+          .order('created_at', { ascending: false });
 
         if (error) {
           console.warn(`[WARN] Order failed for ${table}, retrying without order - Error: ${error.message}`);
           // Fallback: try without ordering
-          const { data: fallbackData, error: fallbackError } = await supabase
-            .from(table)
-            .select('*');
+          const fallback = await supabase.from(table).select('*');
+          data = fallback.data;
+          error = fallback.error;
 
-          if (fallbackError) {
-            console.error(`[ERROR] Table ${table}: ${fallbackError.code} - ${fallbackError.message}`);
+          if (error) {
+            console.error(`[ERROR] Table ${table}: ${error.code} - ${error.message}`);
             debug[table] = -1;
             continue;
           }
+        }
 
-          console.log(`[SUCCESS] Table ${table} (no order): ${fallbackData?.length || 0} rows`);
-          debug[table] = fallbackData?.length || 0;
+        console.log(`[SUCCESS] Table ${table}: ${data?.length || 0} rows`);
+        debug[table] = data?.length || 0;
 
-          if (fallbackData && Array.isArray(fallbackData) && fallbackData.length > 0) {
-            const sourceMap: Record<string, string> = {
-              leads: 'manual_add',
-              priority_access_requests: 'priority_access',
-              waitlist_signups: 'waitlist',
-            };
+        if (data && Array.isArray(data) && data.length > 0) {
+          const sourceMap: Record<string, string> = {
+            leads: 'manual_add',
+            priority_access_requests: 'priority_access',
+            waitlist_signups: 'waitlist',
+          };
 
-            const leadsWithSource = fallbackData.map((item: any) => ({
-              ...item,
-              name: item.name || item.first_name || 'Unknown',
-              email: item.email || '',
-              company: item.company || '',
+          const leadsWithSource = data.map((item: any) => {
+            // Handle different table schemas
+            let name = '';
+            let email = '';
+            let company = '';
+
+            if (table === 'priority_access_requests') {
+              // Combine first_name and last_name
+              name = `${item.first_name || ''} ${item.last_name || ''}`.trim();
+              email = item.email || '';
+              company = item.company || '';
+            } else if (table === 'waitlist_signups') {
+              name = item.name || '';
+              email = item.email || '';
+              company = item.company || '';
+            } else {
+              // leads table
+              name = item.name || '';
+              email = item.email || '';
+              company = item.company || '';
+            }
+
+            return {
+              id: item.id?.toString() || `${table}-${Math.random()}`,
+              name: name || 'Unknown',
+              email: email || '',
+              company: company || '',
+              phone: item.phone || '',
+              industry: item.industry || '',
+              ai_tools: item.ai_tasks || item.ai_tools || '',
+              stage: item.stage || 'New',
+              value: item.value || 0,
+              notes: item.notes || `From ${table}`,
               source: item.source || sourceMap[table] || 'other',
+              created_at: item.created_at || new Date().toISOString(),
+              log: item.log || [],
+              risk_score: item.risk_score,
+              updated_at: item.updated_at,
+              status: item.status,
               _table: table,
-            }));
-
-            allLeads.push(...leadsWithSource);
-          }
-        } else {
-          console.log(`[SUCCESS] Table ${table}: ${data?.length || 0} rows`);
-          debug[table] = data?.length || 0;
-
-          if (data && Array.isArray(data) && data.length > 0) {
-            const sourceMap: Record<string, string> = {
-              leads: 'manual_add',
-              priority_access_requests: 'priority_access',
-              waitlist_signups: 'waitlist',
             };
+          });
 
-            const leadsWithSource = data.map((item: any) => ({
-              ...item,
-              name: item.name || item.first_name || 'Unknown',
-              email: item.email || '',
-              company: item.company || '',
-              source: item.source || sourceMap[table] || 'other',
-              _table: table,
-            }));
-
-            allLeads.push(...leadsWithSource);
-          }
+          allLeads.push(...leadsWithSource);
         }
       } catch (err) {
         console.error(`[ERROR] Exception fetching from table ${table}:`, err);
