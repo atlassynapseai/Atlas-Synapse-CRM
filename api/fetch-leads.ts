@@ -27,7 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
-    const tables = ['leads', 'priority_access', 'waitlist', 'requests', 'request_priority_access'];
+    const tables = ['leads', 'priority_access_requests', 'waitlist_signups'];
     const allLeads: any[] = [];
     const debug: Record<string, number> = {};
 
@@ -46,10 +46,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           debug[table] = data.length;
           const sourceMap: Record<string, string> = {
             leads: 'manual_add',
-            priority_access: 'priority_access',
-            request_priority_access: 'priority_access',
-            waitlist: 'waitlist',
-            requests: 'request_priority_access',
+            priority_access_requests: 'priority_access',
+            waitlist_signups: 'waitlist',
           };
 
           const leadsWithSource = data.map((item) => ({

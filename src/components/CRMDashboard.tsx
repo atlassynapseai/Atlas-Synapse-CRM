@@ -704,7 +704,7 @@ const CRMDashboard = () => {
       try {
         setLoading(true);
         console.log('🔄 Starting data load...');
-        console.log('📊 Fetching from tables: leads, priority_access, waitlist, requests, request_priority_access');
+        console.log('📊 Fetching from tables: leads, priority_access_requests, waitlist_signups');
 
         const data = await fetchLeads();
         console.log('✅ Data loaded:', data.length, 'leads');
@@ -724,7 +724,7 @@ const CRMDashboard = () => {
     loadData();
 
     // Subscribe to real-time changes on all tables
-    const tables = ['leads', 'priority_access', 'waitlist', 'requests', 'request_priority_access'];
+    const tables = ['leads', 'priority_access_requests', 'waitlist_signups'];
     console.log('📡 Setting up real-time subscriptions for:', tables);
 
     const subscriptions = tables.map(table =>
