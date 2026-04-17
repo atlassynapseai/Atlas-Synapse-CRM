@@ -153,9 +153,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
         <div className="glass-card p-8 border border-white/[0.06]">
           {/* Header */}
           <div className="mb-8">
-            <div className="h-12 w-12 bg-gradient-to-br from-atlas-primary to-atlas-secondary rounded-xl flex items-center justify-center mb-4">
-              <LogIn className="text-white h-6 w-6" />
-            </div>
+            <img src="/logo.png" alt="Atlas Synapse" className="h-12 w-12 mb-4 rounded-lg" />
             <h1 className="text-3xl font-bold text-white mb-2">Atlas Synapse</h1>
             <p className="text-slate-400 text-sm">Forensic Growth Engine · CGO Console</p>
           </div>
