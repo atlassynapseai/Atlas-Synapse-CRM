@@ -16,6 +16,7 @@ export async function GET(request: Request) {
 
     const tables = ['leads', 'priority_access', 'waitlist', 'requests', 'request_priority_access'];
     const allLeads: any[] = [];
+    const debug: Record<string, number> = {};
 
     // Fetch from all tables
     for (const table of tables) {
@@ -25,7 +26,11 @@ export async function GET(request: Request) {
           .select('*')
           .order('created_at', { ascending: false });
 
-        if (!error && data) {
+        if (error) {
+          console.error(`Error fetching from ${table}:`, error.message);
+          debug[table] = 0;
+        } else if (data) {
+          debug[table] = data.length;
           const sourceMap: Record<string, string> = {
             leads: 'manual_add',
             priority_access: 'priority_access',
@@ -44,6 +49,7 @@ export async function GET(request: Request) {
         }
       } catch (err) {
         console.error(`Error fetching from table ${table}:`, err);
+        debug[table] = -1;
       }
     }
 
@@ -62,7 +68,7 @@ export async function GET(request: Request) {
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
 
-    return new Response(JSON.stringify({ leads: sorted }), {
+    return new Response(JSON.stringify({ leads: sorted, debug }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
