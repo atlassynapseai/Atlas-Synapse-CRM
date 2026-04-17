@@ -1713,7 +1713,7 @@ const CRMDashboard = () => {
             {tab === 'analytics' && (
               <motion.div key="analytics" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-6">
                 <h2 className="text-2xl font-bold text-white">📊 Advanced Analytics</h2>
-                <AdvancedAnalyticsDashboard />
+                <AdvancedAnalyticsDashboard leads={leads} />
               </motion.div>
             )}
 
