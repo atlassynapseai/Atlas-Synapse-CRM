@@ -108,9 +108,9 @@ Sales Cycle: ${metrics.salesCycle} days
 
 TOP TERRITORIES
 ${territories
-  .slice(0, 5)
-  .map((t) => `${t.name}: $${t.revenue.toLocaleString()} (${t.deals} deals)`)
-  .join('\n')}
+      .slice(0, 5)
+      .map((t) => `${t.name}: $${t.revenue.toLocaleString()} (${t.deals} deals)`)
+      .join('\n')}
   `;
 }
 

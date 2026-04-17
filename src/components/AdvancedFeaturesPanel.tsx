@@ -28,43 +28,39 @@ export const AdvancedFeaturesPanel: React.FC = () => {
       <div className="flex gap-2 flex-wrap">
         <button
           onClick={() => setTabs('fields')}
-          className={`px-3 py-2 rounded text-xs font-bold ${
-            tabs === 'fields'
+          className={`px-3 py-2 rounded text-xs font-bold ${tabs === 'fields'
               ? 'bg-blue-600 text-white'
               : 'bg-slate-700 text-slate-300'
-          }`}
+            }`}
         >
           Custom Fields
         </button>
         <button
           onClick={() => setTabs('contracts')}
-          className={`px-3 py-2 rounded text-xs font-bold ${
-            tabs === 'contracts'
+          className={`px-3 py-2 rounded text-xs font-bold ${tabs === 'contracts'
               ? 'bg-green-600 text-white'
               : 'bg-slate-700 text-slate-300'
-          }`}
+            }`}
         >
           <FileCheck className="h-4 w-4 inline mr-1" />
           Contracts
         </button>
         <button
           onClick={() => setTabs('territories')}
-          className={`px-3 py-2 rounded text-xs font-bold ${
-            tabs === 'territories'
+          className={`px-3 py-2 rounded text-xs font-bold ${tabs === 'territories'
               ? 'bg-purple-600 text-white'
               : 'bg-slate-700 text-slate-300'
-          }`}
+            }`}
         >
           <MapPin className="h-4 w-4 inline mr-1" />
           Territories
         </button>
         <button
           onClick={() => setTabs('docs')}
-          className={`px-3 py-2 rounded text-xs font-bold ${
-            tabs === 'docs'
+          className={`px-3 py-2 rounded text-xs font-bold ${tabs === 'docs'
               ? 'bg-orange-600 text-white'
               : 'bg-slate-700 text-slate-300'
-          }`}
+            }`}
         >
           <FileText className="h-4 w-4 inline mr-1" />
           Documents

@@ -102,7 +102,7 @@ export async function predictChurn(lead: Lead, allLeads: Lead[]): Promise<ChurnR
   const riskScore = Math.min(
     100,
     (daysSinceContact / 90) * 50 +
-      ((1 - (lead.interaction_count || 0) / (avgInteractions * 2)) * 50)
+    ((1 - (lead.interaction_count || 0) / (avgInteractions * 2)) * 50)
   );
 
   return {
