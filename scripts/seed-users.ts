@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import * as dotenv from 'dotenv';
+import { randomBytes } from 'crypto';
 
 dotenv.config();
 
@@ -38,8 +39,8 @@ async function seedUsers() {
         continue;
       }
 
-      // Create the user with a temporary password
-      const tempPassword = Math.random().toString(36).slice(-12);
+      // Create the user with a cryptographically secure temporary password
+      const tempPassword = randomBytes(16).toString('hex');
       const { data, error } = await supabase.auth.admin.createUser({
         email,
         password: tempPassword,

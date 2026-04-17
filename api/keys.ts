@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { randomBytes } from 'crypto';
 
 export async function POST(request: Request) {
   try {
@@ -17,8 +18,8 @@ export async function POST(request: Request) {
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
     if (action === 'create') {
-      // Generate API key
-      const apiKey = `atlas_${Math.random().toString(36).substr(2, 32)}`;
+      // Generate cryptographically secure API key
+      const apiKey = `atlas_${randomBytes(24).toString('hex')}`;
 
       const { data, error } = await supabase.from('api_keys').insert({
         name,

@@ -148,13 +148,13 @@ def setup_supabase_tables(supabase_url, service_key):
 
     for sql in sql_commands:
         try:
-            # Use psql or curl to execute
-            cmd = f"""curl -X POST '{supabase_url}/rest/v1/rpc/exec_sql' \
+            # Use curl to execute - do NOT log the service key
+            actual_cmd = f"""curl -X POST '{supabase_url}/rest/v1/rpc/exec_sql' \
                 -H 'apikey: {service_key}' \
                 -H 'Content-Type: application/json' \
                 -d '{{"sql": "{sql.replace(chr(10), " ")}"}}' """
 
-            success, stdout, stderr = run_command(cmd)
+            success, stdout, stderr = run_command(actual_cmd)
             if not success and "already exists" not in stderr:
                 print(f"  ⚠️  {stderr[:50]}...")
         except Exception as e:
@@ -167,6 +167,7 @@ def setup_vercel_env(env_vars):
     print("\n🔑 Setting Vercel environment variables...")
 
     for key, value in env_vars.items():
+        # Do NOT log the actual value to prevent leaking sensitive info
         cmd = f'vercel env add {key} "{value}" --yes 2>/dev/null'
         success, _, _ = run_command(cmd)
         if success:
