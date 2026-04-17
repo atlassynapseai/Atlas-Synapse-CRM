@@ -1,5 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
+import { randomBytes } from 'crypto';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Enable CORS
@@ -89,7 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
 
             return {
-              id: item.id?.toString() || `${table}-${Math.random()}`,
+              id: item.id?.toString() || `${table}-${randomBytes(8).toString('hex')}`,
               name: name || 'Unknown',
               email: email || '',
               company: company || '',

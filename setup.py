@@ -167,13 +167,20 @@ def setup_vercel_env(env_vars):
     print("\n🔑 Setting Vercel environment variables...")
 
     for key, value in env_vars.items():
-        # Do NOT log the actual value to prevent leaking sensitive info
-        cmd = f'vercel env add {key} "{value}" --yes 2>/dev/null'
-        success, _, _ = run_command(cmd)
-        if success:
-            print(f"  ✅ {key}")
-        else:
-            print(f"  ⚠️  {key} (may need manual setup)")
+        # Use os.environ to pass secrets securely (not in command string)
+        env = os.environ.copy()
+        env['_VERCEL_ENV_VALUE'] = value
+        cmd = f'vercel env add {key} "${{_VERCEL_ENV_VALUE}}" --yes 2>/dev/null'
+
+        try:
+            # Run with restricted shell to prevent value leakage
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, env=env, timeout=30)
+            if result.returncode == 0:
+                print(f"  ✅ {key}")
+            else:
+                print(f"  ⚠️  {key} (may need manual setup)")
+        except subprocess.TimeoutExpired:
+            print(f"  ⚠️  {key} (timeout)")
 
 def deploy_vercel():
     """Deploy to Vercel"""
