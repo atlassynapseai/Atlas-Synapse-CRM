@@ -120,17 +120,30 @@ async function fetchLeads(): Promise<Lead[]> {
 
 async function saveLead(lead: Lead): Promise<Lead | null> {
   try {
+    // If lead came from another table, update that table, otherwise update leads table
+    const targetTable = lead._table && lead._table !== 'leads' ? lead._table : 'leads';
+
+    // For upsert, we only need the original fields, not our custom ones
+    const leadData = { ...lead };
+    delete leadData._table;
+
     const { data, error } = await supabase
-      .from('leads')
-      .upsert(lead)
+      .from(targetTable)
+      .upsert(leadData)
       .select();
 
     if (error) {
-      console.error('Error saving lead:', error);
+      console.error(`Error saving lead to ${targetTable}:`, error);
       return null;
     }
 
-    return data?.[0] || null;
+    // Add back the _table field for consistency
+    const result = data?.[0];
+    if (result) {
+      result._table = targetTable;
+    }
+
+    return result || null;
   } catch (err) {
     console.error('Error saving lead:', err);
     return null;
