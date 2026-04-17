@@ -191,16 +191,17 @@ const Toast = ({ message, type }: { message: string; type: 'success' | 'error' |
   );
 };
 
-const StatCard = ({ label, value, change, changeType, icon: Icon, accent }:
-  { label: string; value: string; change: string; changeType: 'up' | 'down' | 'warn'; icon: any; accent: string }) => (
+const StatCard = ({ label, value, change, changeType, icon: Icon, accent, delay = 0 }:
+  { label: string; value: string; change: string; changeType: 'up' | 'down' | 'warn'; icon: any; accent: string; delay?: number }) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
-    className="glass-card p-6 relative overflow-hidden"
+    transition={{ delay }}
+    className="stat-card-hover glass-card p-6 relative overflow-hidden border border-white/[0.08] hover:border-white/[0.15]"
   >
-    <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: accent }} />
+    <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
     <div className="flex items-center justify-between mb-4">
-      <div className="p-2 bg-white/5 rounded-lg">
+      <div className="p-2 bg-white/5 rounded-lg hover:bg-white/10 transition-colors">
         <Icon className="h-5 w-5" style={{ color: accent }} />
       </div>
       <span className={cn('text-xs font-bold',
@@ -904,10 +905,70 @@ const CRMDashboard = () => {
             {tab === 'overview' && (
               <motion.div key="overview" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-8">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                  <StatCard label="Pipeline Value" value={fmtVal(totalValue)} change={leads.length > 0 ? 'Active' : 'Empty'} changeType="up" icon={TrendingUp} accent="linear-gradient(90deg,#10b981,transparent)" />
-                  <StatCard label="Total Leads" value={String(leads.length)} change={leads.length > 0 ? `+${leads.length}` : '0'} changeType="up" icon={Users} accent="linear-gradient(90deg,#f97316,transparent)" />
-                  <StatCard label="Closed Won" value={String(wonCount)} change={wonCount > 0 ? `${Math.round(wonCount / Math.max(leads.length, 1) * 100)}% rate` : '0%'} changeType="up" icon={CheckCircle2} accent="linear-gradient(90deg,#10b981,transparent)" />
-                  <StatCard label="Avg Risk Score" value={String(avgRisk)} change={avgRisk >= 7 ? 'CRITICAL' : avgRisk >= 4 ? 'MODERATE' : 'LOW'} changeType={avgRisk >= 7 ? 'warn' : 'up'} icon={ShieldAlert} accent="linear-gradient(90deg,#ef4444,transparent)" />
+                  <StatCard label="Pipeline Value" value={fmtVal(totalValue)} change={leads.length > 0 ? 'Active' : 'Empty'} changeType="up" icon={TrendingUp} accent="linear-gradient(90deg,#10b981,transparent)" delay={0.05} />
+                  <StatCard label="Total Leads" value={String(leads.length)} change={leads.length > 0 ? `+${leads.length}` : '0'} changeType="up" icon={Users} accent="linear-gradient(90deg,#f97316,transparent)" delay={0.1} />
+                  <StatCard label="Closed Won" value={String(wonCount)} change={wonCount > 0 ? `${Math.round(wonCount / Math.max(leads.length, 1) * 100)}% rate` : '0%'} changeType="up" icon={CheckCircle2} accent="linear-gradient(90deg,#10b981,transparent)" delay={0.15} />
+                  <StatCard label="Avg Risk Score" value={String(avgRisk)} change={avgRisk >= 7 ? 'CRITICAL' : avgRisk >= 4 ? 'MODERATE' : 'LOW'} changeType={avgRisk >= 7 ? 'warn' : 'up'} icon={ShieldAlert} accent="linear-gradient(90deg,#ef4444,transparent)" delay={0.2} />
+                </div>
+
+                {/* NEW: Dedicated Metric Cards for Priority Access & Waitlist */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  {/* Priority Access Requests */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.25 }}
+                    className="metric-card pulse-glow border-l-4 border-l-blue-500"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">Priority Access</h4>
+                      <Briefcase className="h-5 w-5 text-blue-400" />
+                    </div>
+                    <div className="text-4xl font-black text-blue-400 mb-2">{sourceBreakdown.priority_access_requests || 0}</div>
+                    <div className="text-xs text-slate-400">requests pending</div>
+                    <div className="text-xs text-slate-500 mt-2">
+                      {leads.length > 0 && `${Math.round(((sourceBreakdown.priority_access_requests || 0) / leads.length) * 100)}% of total`}
+                    </div>
+                  </motion.div>
+
+                  {/* Waitlist Signups */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="metric-card pulse-glow border-l-4 border-l-green-500"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">Waitlist</h4>
+                      <Users className="h-5 w-5 text-green-400" />
+                    </div>
+                    <div className="text-4xl font-black text-green-400 mb-2">{sourceBreakdown.waitlist_signups || 0}</div>
+                    <div className="text-xs text-slate-400">signups queued</div>
+                    <div className="text-xs text-slate-500 mt-2">
+                      {leads.length > 0 && `${Math.round(((sourceBreakdown.waitlist_signups || 0) / leads.length) * 100)}% of total`}
+                    </div>
+                  </motion.div>
+
+                  {/* Active Pipeline */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.35 }}
+                    className="metric-card pulse-glow border-l-4 border-l-purple-500"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">Active Pipeline</h4>
+                      <Activity className="h-5 w-5 text-purple-400" />
+                    </div>
+                    <div className="text-4xl font-black text-purple-400 mb-2">{leads.filter(l => l.stage !== 'Lost').length}</div>
+                    <div className="text-xs text-slate-400">non-lost leads</div>
+                    <div className="text-xs text-slate-500 mt-2">
+                      health status{' '}
+                      <span className={avgRisk < 4 ? 'text-green-400' : avgRisk < 7 ? 'text-yellow-400' : 'text-red-400'}>
+                        {avgRisk < 4 ? '✓ Good' : avgRisk < 7 ? '! Fair' : '✗ High'}
+                      </span>
+                    </div>
+                  </motion.div>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -34,29 +34,68 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Fetch from all tables
     for (const table of tables) {
       try {
-        const { data, error } = await supabase
-          .from(table)
-          .select('*')
-          .order('created_at', { ascending: false });
+        console.log(`[INFO] Fetching from table: ${table}`);
+
+        // Try with ordering first
+        let queryBuilder = supabase.from(table).select('*');
+        const { data, error } = await queryBuilder.order('created_at', { ascending: false });
 
         if (error) {
-          console.error(`[ERROR] Table ${table}:`, error.message);
-          debug[table] = 0;
-        } else if (data) {
-          debug[table] = data.length;
-          const sourceMap: Record<string, string> = {
-            leads: 'manual_add',
-            priority_access_requests: 'priority_access',
-            waitlist_signups: 'waitlist',
-          };
+          console.warn(`[WARN] Order failed for ${table}, retrying without order - Error: ${error.message}`);
+          // Fallback: try without ordering
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from(table)
+            .select('*');
 
-          const leadsWithSource = data.map((item) => ({
-            ...item,
-            source: item.source || sourceMap[table] || 'other',
-            _table: table,
-          }));
+          if (fallbackError) {
+            console.error(`[ERROR] Table ${table}: ${fallbackError.code} - ${fallbackError.message}`);
+            debug[table] = -1;
+            continue;
+          }
 
-          allLeads.push(...leadsWithSource);
+          console.log(`[SUCCESS] Table ${table} (no order): ${fallbackData?.length || 0} rows`);
+          debug[table] = fallbackData?.length || 0;
+
+          if (fallbackData && Array.isArray(fallbackData) && fallbackData.length > 0) {
+            const sourceMap: Record<string, string> = {
+              leads: 'manual_add',
+              priority_access_requests: 'priority_access',
+              waitlist_signups: 'waitlist',
+            };
+
+            const leadsWithSource = fallbackData.map((item: any) => ({
+              ...item,
+              name: item.name || item.first_name || 'Unknown',
+              email: item.email || '',
+              company: item.company || '',
+              source: item.source || sourceMap[table] || 'other',
+              _table: table,
+            }));
+
+            allLeads.push(...leadsWithSource);
+          }
+        } else {
+          console.log(`[SUCCESS] Table ${table}: ${data?.length || 0} rows`);
+          debug[table] = data?.length || 0;
+
+          if (data && Array.isArray(data) && data.length > 0) {
+            const sourceMap: Record<string, string> = {
+              leads: 'manual_add',
+              priority_access_requests: 'priority_access',
+              waitlist_signups: 'waitlist',
+            };
+
+            const leadsWithSource = data.map((item: any) => ({
+              ...item,
+              name: item.name || item.first_name || 'Unknown',
+              email: item.email || '',
+              company: item.company || '',
+              source: item.source || sourceMap[table] || 'other',
+              _table: table,
+            }));
+
+            allLeads.push(...leadsWithSource);
+          }
         }
       } catch (err) {
         console.error(`[ERROR] Exception fetching from table ${table}:`, err);
