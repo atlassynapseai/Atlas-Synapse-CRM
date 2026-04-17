@@ -5,7 +5,12 @@ import { defineConfig, loadEnv } from 'vite';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
+  // Use /Atlas-Synapse-CRM/ for production, / for preview
+  const isProduction = mode === 'production';
+  const base = isProduction ? '/Atlas-Synapse-CRM/' : '/';
+
   return {
+    base,
     plugins: [react(), tailwindcss()],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
