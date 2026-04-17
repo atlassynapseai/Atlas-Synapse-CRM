@@ -896,6 +896,12 @@ const CRMDashboard = () => {
   const [showCSVMenu, setShowCSVMenu] = useState(false);
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
 
+  // API & Security state
+  const [apiKeys, setApiKeys] = useState<{ id: string; name: string; key: string; created_at: string }[]>([]);
+  const [showNewKeyForm, setShowNewKeyForm] = useState(false);
+  const [newKeyName, setNewKeyName] = useState('');
+  const [twoFAEnabled, setTwoFAEnabled] = useState(false);
+
   // Form state
   const [form, setForm] = useState({ name: '', email: '', company: '', phone: '', industry: '', ai_tools: '', stage: 'New' as PipelineStage, value: '', notes: '' });
 
@@ -1075,6 +1081,84 @@ const CRMDashboard = () => {
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
     a.download = `atlas-leads${filterLabel}-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
+  };
+
+  // API Key Handler
+  const handleCreateApiKey = async () => {
+    if (!newKeyName.trim()) {
+      showToast('Key name required', 'error');
+      return;
+    }
+    try {
+      const res = await fetch('/api/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create', name: newKeyName }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setApiKeys([...(apiKeys || []), data.key]);
+        setNewKeyName('');
+        setShowNewKeyForm(false);
+        showToast('API key created successfully', 'success');
+      }
+    } catch (e) {
+      showToast('Failed to create API key', 'error');
+    }
+  };
+
+  // 2FA Handler
+  const handleToggle2FA = async () => {
+    try {
+      const res = await fetch('/api/security', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'toggle_2fa' }),
+      });
+      if (res.ok) {
+        setTwoFAEnabled(!twoFAEnabled);
+        showToast(`2FA ${!twoFAEnabled ? 'enabled' : 'disabled'}`, 'success');
+      }
+    } catch (e) {
+      showToast('Failed to update 2FA settings', 'error');
+    }
+  };
+
+  // GDPR Export Handler
+  const handleGDPRExport = async () => {
+    try {
+      const res = await fetch('/api/gdpr?action=export');
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `gdpr-export-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        showToast('Data exported successfully', 'success');
+      }
+    } catch (e) {
+      showToast('Failed to export data', 'error');
+    }
+  };
+
+  // GDPR Delete Handler
+  const handleGDPRDelete = async () => {
+    if (!confirm('⚠️ This will permanently delete all your data. This cannot be undone. Are you sure?')) {
+      return;
+    }
+    try {
+      const res = await fetch('/api/gdpr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete' }),
+      });
+      if (res.ok) {
+        showToast('Account and data deleted', 'success');
+      }
+    } catch (e) {
+      showToast('Failed to delete account', 'error');
+    }
   };
 
   return (
@@ -1668,10 +1752,18 @@ const CRMDashboard = () => {
                 <h2 className="text-2xl font-bold text-white">🔐 Enterprise Security</h2>
                 <div className="glass-card p-6 rounded-lg border border-white/10 space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-bold">Enable 2FA</button>
-                    <button className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded font-bold">Export Data (GDPR)</button>
-                    <button className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-bold">Delete Account (GDPR)</button>
-                    <button className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded font-bold">View Audit Logs</button>
+                    <button onClick={handleToggle2FA} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-bold">
+                      {twoFAEnabled ? '✓ 2FA Enabled' : 'Enable 2FA'}
+                    </button>
+                    <button onClick={handleGDPRExport} className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded font-bold">
+                      Export Data (GDPR)
+                    </button>
+                    <button onClick={handleGDPRDelete} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-bold">
+                      Delete Account (GDPR)
+                    </button>
+                    <button className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded font-bold">
+                      View Audit Logs
+                    </button>
                   </div>
                   <p className="text-sm text-slate-300 mt-4">✅ SOC 2 Compliance • ✅ GDPR Ready • ✅ Encrypted Sessions • ✅ Role-Based Access</p>
                 </div>
@@ -1689,8 +1781,40 @@ const CRMDashboard = () => {
                   </div>
                   <div>
                     <p className="text-sm text-slate-300 mb-2">🔑 Generate API Key:</p>
-                    <button className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-bold text-sm">Create New Key</button>
+                    {!showNewKeyForm ? (
+                      <button onClick={() => setShowNewKeyForm(true)} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-bold text-sm">
+                        Create New Key
+                      </button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Key name (e.g., Production API)"
+                          value={newKeyName}
+                          onChange={(e) => setNewKeyName(e.target.value)}
+                          className="flex-1 bg-slate-800 border border-slate-600 rounded px-3 py-2 text-white text-sm"
+                        />
+                        <button onClick={handleCreateApiKey} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-bold text-sm">
+                          Create
+                        </button>
+                        <button onClick={() => setShowNewKeyForm(false)} className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded font-bold text-sm">
+                          Cancel
+                        </button>
+                      </div>
+                    )}
                   </div>
+                  {apiKeys && apiKeys.length > 0 && (
+                    <div>
+                      <p className="text-sm text-slate-300 mb-2">📋 Your API Keys:</p>
+                      <div className="space-y-2">
+                        {apiKeys.map((key: any, idx: number) => (
+                          <div key={idx} className="bg-slate-800/50 p-2 rounded text-xs text-slate-400">
+                            {typeof key === 'string' ? `sk_${key.substring(0, 8)}...` : key.name || 'API Key'}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <p className="text-sm text-slate-300 mb-2">📦 SDK Available:</p>
                     <code className="bg-slate-800 p-2 rounded text-xs text-green-400">npm install @atlas-synapse/sdk</code>

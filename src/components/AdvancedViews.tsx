@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { ChevronRight, GripVertical } from 'lucide-react';
 
+// Utility to combine classNames
+const cn = (...classes: (string | undefined | boolean)[]) =>
+  classes.filter(Boolean).join(' ');
+
 interface Lead {
   id: string;
   name: string;
@@ -79,11 +83,27 @@ export const KanbanView: React.FC<{ leads: Lead[] }> = ({ leads }) => {
   );
 };
 
-// Timeline View
+// Timeline View - Real-time with actual dates
 export const TimelineView: React.FC<{ leads: Lead[] }> = ({ leads }) => {
-  const sorted = [...leads].sort(
-    (a, b) => new Date(a.id).getTime() - new Date(b.id).getTime()
-  );
+  // Sort by actual lead creation date if available, otherwise by stage progression
+  const sorted = [...leads].sort((a, b) => {
+    const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return bTime - aTime; // Most recent first
+  });
+
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return 'No date';
+    const date = new Date(dateStr);
+    const today = new Date();
+    const diff = Math.floor((today.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diff === 0) return 'Today';
+    if (diff === 1) return 'Yesterday';
+    if (diff < 7) return `${diff} days ago`;
+    if (diff < 30) return `${Math.floor(diff / 7)} weeks ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
 
   return (
     <div className="space-y-4">
@@ -95,14 +115,15 @@ export const TimelineView: React.FC<{ leads: Lead[] }> = ({ leads }) => {
           transition={{ delay: idx * 0.05 }}
           className="flex gap-4"
         >
-          <div className="flex-shrink-0 w-20 text-right">
-            <p className="text-xs font-bold text-blue-400">Jan {idx + 1}</p>
+          <div className="flex-shrink-0 w-24 text-right">
+            <p className="text-xs font-bold text-blue-400">{formatDate(lead.created_at)}</p>
+            <p className="text-[10px] text-slate-500 mt-1">{lead.stage}</p>
           </div>
           <div className="flex-1">
-            <div className="bg-slate-800 rounded-lg p-4 border-l-4 border-blue-500">
+            <div className="bg-slate-800 rounded-lg p-4 border-l-4 border-blue-500 hover:border-green-500 transition">
               <p className="font-semibold text-white">{lead.name}</p>
               <p className="text-sm text-slate-400">{lead.company}</p>
-              <p className="text-xs text-green-400 mt-2">{lead.stage}</p>
+              <p className="text-xs text-green-400 mt-2">${(lead.value / 1000).toFixed(0)}K deal</p>
             </div>
           </div>
         </motion.div>
@@ -111,43 +132,85 @@ export const TimelineView: React.FC<{ leads: Lead[] }> = ({ leads }) => {
   );
 };
 
-// Calendar View (simplified)
+// Calendar View - Real-time with actual task dates
 export const CalendarView: React.FC<{ leads: Lead[] }> = ({ leads }) => {
-  const days = Array.from({ length: 31 }, (_, i) => i + 1);
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth();
+
+  // Get first day of month and number of days
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+  // Map leads to calendar dates based on their created_at
+  const leadsPerDay: Record<number, Lead[]> = {};
+  leads.forEach((lead) => {
+    if (lead.created_at) {
+      const leadDate = new Date(lead.created_at);
+      if (leadDate.getFullYear() === year && leadDate.getMonth() === month) {
+        const day = leadDate.getDate();
+        if (!leadsPerDay[day]) leadsPerDay[day] = [];
+        leadsPerDay[day].push(lead);
+      }
+    }
+  });
+
+  const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
   return (
-    <div className="grid grid-cols-7 gap-2">
-      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-        <div key={day} className="text-center font-bold text-slate-400 text-xs py-2">
-          {day}
-        </div>
-      ))}
-      {days.map((day) => {
-        const dayLeads = leads.slice(0, Math.random() * 3);
-        return (
-          <motion.div
-            key={day}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="aspect-square bg-slate-800 rounded-lg p-2 border border-slate-700 hover:border-blue-500 transition"
-          >
-            <p className="text-xs font-bold text-white mb-1">{day}</p>
-            <div className="space-y-0.5">
-              {dayLeads.slice(0, 2).map((lead, idx) => (
-                <div
-                  key={idx}
-                  className="text-[10px] bg-blue-600 text-white rounded px-1 truncate"
-                >
-                  {lead.name.split(' ')[0]}
-                </div>
-              ))}
-              {dayLeads.length > 2 && (
-                <p className="text-[10px] text-slate-400">+{dayLeads.length - 2}</p>
+    <div className="space-y-4">
+      <p className="text-sm font-bold text-slate-300">📅 {monthName}</p>
+      <div className="grid grid-cols-7 gap-2">
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((dayName) => (
+          <div key={dayName} className="text-center font-bold text-slate-400 text-xs py-2">
+            {dayName}
+          </div>
+        ))}
+        {/* Empty cells for days before month starts */}
+        {Array.from({ length: firstDay }).map((_, i) => (
+          <div key={`empty-${i}`} className="aspect-square bg-slate-900/30 rounded-lg" />
+        ))}
+        {/* Days with leads */}
+        {days.map((day) => {
+          const dayLeads = leadsPerDay[day] || [];
+          const isToday = day === today.getDate();
+          return (
+            <motion.div
+              key={day}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className={cn(
+                'aspect-square rounded-lg p-2 border transition',
+                isToday
+                  ? 'bg-blue-600/30 border-blue-500 shadow-lg shadow-blue-500/20'
+                  : 'bg-slate-800 border-slate-700 hover:border-blue-500'
               )}
-            </div>
-          </motion.div>
-        );
-      })}
+            >
+              <p className={cn('text-xs font-bold mb-1', isToday ? 'text-blue-300' : 'text-white')}>
+                {day}
+              </p>
+              <div className="space-y-0.5">
+                {dayLeads.slice(0, 2).map((lead, idx) => (
+                  <div
+                    key={idx}
+                    className="text-[10px] bg-green-600 text-white rounded px-1 truncate"
+                    title={`${lead.name} - ${lead.stage}`}
+                  >
+                    {lead.name.split(' ')[0]}
+                  </div>
+                ))}
+                {dayLeads.length > 2 && (
+                  <p className="text-[10px] text-slate-400 font-bold">+{dayLeads.length - 2}</p>
+                )}
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+      <p className="text-xs text-slate-500 mt-4">
+        💡 {Object.values(leadsPerDay).flat().length} tasks this month • {Object.keys(leadsPerDay).length} active days
+      </p>
     </div>
   );
 };
