@@ -24,41 +24,77 @@ app.get('/api/fetch-leads', async (req, res) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
-    const tables = ['leads', 'priority_access', 'waitlist', 'requests', 'request_priority_access'];
+    const tables = ['leads', 'priority_access_requests', 'waitlist_signups'];
     const allLeads: any[] = [];
     const debug: Record<string, number> = {};
 
-    // Fetch from all tables
+    // Fetch from all tables with improved error handling and schema mapping
     for (const table of tables) {
       try {
+        console.log(`[INFO] Fetching from table: ${table}`);
+
         const { data, error } = await supabase
           .from(table)
           .select('*')
           .order('created_at', { ascending: false });
 
         if (error) {
-          console.error(`Error fetching from ${table}:`, error.message);
+          console.warn(`[WARN] Error fetching from ${table}: ${error.message}`);
           debug[table] = 0;
-        } else if (data) {
-          debug[table] = data.length;
+          continue;
+        }
+
+        console.log(`[SUCCESS] Table ${table}: ${data?.length || 0} rows`);
+        debug[table] = data?.length || 0;
+
+        if (data && Array.isArray(data) && data.length > 0) {
           const sourceMap: Record<string, string> = {
             leads: 'manual_add',
-            priority_access: 'priority_access',
-            request_priority_access: 'priority_access',
-            waitlist: 'waitlist',
-            requests: 'request_priority_access',
+            priority_access_requests: 'priority_access',
+            waitlist_signups: 'waitlist',
           };
 
-          const leadsWithSource = data.map((item) => ({
-            ...item,
-            source: item.source || sourceMap[table] || 'other',
-            _table: table,
-          }));
+          const leadsWithSource = data.map((item: any) => {
+            // Handle different table schemas
+            let name = '';
+            let email = '';
+            let company = '';
+
+            if (table === 'priority_access_requests') {
+              name = `${item.first_name || ''} ${item.last_name || ''}`.trim();
+              email = item.email || '';
+              company = item.company || '';
+            } else {
+              name = item.name || '';
+              email = item.email || '';
+              company = item.company || '';
+            }
+
+            return {
+              id: item.id?.toString() || `${table}-${Math.random()}`,
+              name: name || 'Unknown',
+              email: email || '',
+              company: company || '',
+              phone: item.phone || '',
+              industry: item.industry || '',
+              ai_tools: item.ai_tasks || item.ai_tools || '',
+              stage: item.stage || 'New',
+              value: item.value || 0,
+              notes: item.notes || `From ${table}`,
+              source: item.source || sourceMap[table] || 'other',
+              created_at: item.created_at || new Date().toISOString(),
+              log: item.log || [],
+              risk_score: item.risk_score,
+              updated_at: item.updated_at,
+              status: item.status,
+              _table: table,
+            };
+          });
 
           allLeads.push(...leadsWithSource);
         }
       } catch (err) {
-        console.error(`Error fetching from table ${table}:`, err);
+        console.error(`[ERROR] Exception fetching from table ${table}:`, err);
         debug[table] = -1;
       }
     }

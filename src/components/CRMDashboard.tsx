@@ -191,26 +191,41 @@ const AUDITOR_NOTE = "Listen carefully. Your current infrastructure is a sieve. 
 
 // ── SUB-COMPONENTS ──
 
-const Toast = ({ message, type }: { message: string; type: 'success' | 'error' | 'info' }) => {
-  const bgColor = type === 'success' ? 'bg-green-500/10 border-green-500/20' : type === 'error' ? 'bg-red-500/10 border-red-500/20' : 'bg-blue-500/10 border-blue-500/20';
-  const textColor = type === 'success' ? 'text-green-400' : type === 'error' ? 'text-red-400' : 'text-blue-400';
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
-      className={`fixed top-4 right-4 px-4 py-3 rounded-lg border glass-card ${bgColor} z-[100]`}
-    >
-      <span className={`text-sm font-medium ${textColor}`}>{message}</span>
-    </motion.div>
-  );
+// Enhanced Tooltips for Charts
+const PipelineTooltip = (props: any) => {
+  const { active, payload } = props;
+  if (active && payload && payload[0]) {
+    const data = payload[0].payload;
+    const descriptions: Record<string, string> = {
+      'New': '📧 Recently registered, awaiting outreach',
+      'Contacted': '☎️ Initial contact made, waiting for response',
+      'Proposal': '📋 Proposal sent, under review',
+      'Negotiation': '💼 Active discussions, deal refinement',
+      'Won': '🎉 Closed successfully',
+      'Lost': '❌ Disqualified or unresponsive'
+    };
+    return (
+      <div className="bg-atlas-bg/95 border border-white/20 rounded-lg p-3 shadow-xl backdrop-blur-sm">
+        <p className="text-xs font-bold text-white mb-1">{data.name}</p>
+        <p className="text-sm font-black text-atlas-primary mb-2">{data.value} leads</p>
+        <p className="text-[10px] text-slate-400">{descriptions[data.name]}</p>
+      </div>
+    );
+  }
+  return null;
 };
 
-const StatCard = ({ label, value, change, changeType, icon: Icon, accent, delay = 0 }:
-  { label: string; value: string; change: string; changeType: 'up' | 'down' | 'warn'; icon: any; accent: string; delay?: number }) => (
+const StatCard = ({ label, value, change, changeType, icon: Icon, accent, delay = 0, explanation }:
+  { label: string; value: string; change: string; changeType: 'up' | 'down' | 'warn'; icon: any; accent: string; delay?: number; explanation?: string }) => {
+  const [showExplanation, setShowExplanation] = useState(false);
+  return (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ delay }}
-    className="stat-card-hover glass-card p-6 relative overflow-hidden border border-white/[0.08] hover:border-white/[0.15]"
+    className="stat-card-hover glass-card p-6 relative overflow-hidden border border-white/[0.08] hover:border-white/[0.15] cursor-help transition-all"
+    onMouseEnter={() => setShowExplanation(true)}
+    onMouseLeave={() => setShowExplanation(false)}
   >
     <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
     <div className="flex items-center justify-between mb-4">
@@ -223,8 +238,34 @@ const StatCard = ({ label, value, change, changeType, icon: Icon, accent, delay 
     </div>
     <div className="text-2xl font-bold text-white mb-1">{value}</div>
     <div className="text-xs text-slate-500 uppercase tracking-wider">{label}</div>
+    <AnimatePresence>
+      {showExplanation && explanation && (
+        <motion.div
+          initial={{ opacity: 0, y: -5 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -5 }}
+          className="mt-4 pt-4 border-t border-white/10 text-[10px] text-slate-400 leading-relaxed"
+        >
+          {explanation}
+        </motion.div>
+      )}
+    </AnimatePresence>
   </motion.div>
 );
+};
+
+const Toast = ({ message, type }: { message: string; type: 'success' | 'error' | 'info' }) => {
+  const bgColor = type === 'success' ? 'bg-green-500/10 border-green-500/20' : type === 'error' ? 'bg-red-500/10 border-red-500/20' : 'bg-blue-500/10 border-blue-500/20';
+  const textColor = type === 'success' ? 'text-green-400' : type === 'error' ? 'text-red-400' : 'text-blue-400';
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+      className={`fixed top-4 right-4 px-4 py-3 rounded-lg border glass-card ${bgColor} z-[100]`}
+    >
+      <span className={`text-sm font-medium ${textColor}`}>{message}</span>
+    </motion.div>
+  );
+};
 
 const RiskBar = ({ score }: { score: number }) => {
   const color = riskColor(score);
@@ -702,13 +743,15 @@ const ContactModal = ({ lead, onClose, onUpdate }: { lead: Lead; onClose: () => 
 
 // ── MAIN COMPONENT ──
 const CRMDashboard = () => {
-  const [tab, setTab] = useState<'overview' | 'contacts' | 'pipeline' | 'add' | 'audit'>('overview');
+  const [tab, setTab] = useState<'overview' | 'contacts' | 'pipeline' | 'add' | 'audit' | 'notifications'>('overview');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [search, setSearch] = useState('');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'priority_access' | 'manual_add' | 'waitlist'>('all');
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [showCSVMenu, setShowCSVMenu] = useState(false);
+  const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
 
   // Form state
   const [form, setForm] = useState({ name: '', email: '', company: '', phone: '', industry: '', ai_tools: '', stage: 'New' as PipelineStage, value: '', notes: '' });
@@ -847,13 +890,18 @@ const CRMDashboard = () => {
     }
   };
 
-  const exportCSV = () => {
+  const exportCSV = (filter?: string) => {
+    const filteredLeads = filter && filter !== 'all'
+      ? leads.filter(l => l.source === filter)
+      : leads;
+
     const headers = ['Name', 'Email', 'Company', 'Phone', 'Industry', 'AI Tools', 'Stage', 'Risk Score', 'Value', 'Notes', 'Created'];
-    const rows = leads.map(l => [l.name, l.email, l.company, l.phone || '', l.industry || '', l.ai_tools || '', l.stage, l.risk_score ?? calcRisk(l), l.value || 0, l.notes || '', l.created_at]);
+    const rows = filteredLeads.map(l => [l.name, l.email, l.company, l.phone || '', l.industry || '', l.ai_tools || '', l.stage, l.risk_score ?? calcRisk(l), l.value || 0, l.notes || '', l.created_at]);
     const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
     const a = document.createElement('a');
+    const filterLabel = filter && filter !== 'all' ? `-${filter}` : '';
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-    a.download = `atlas-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `atlas-leads${filterLabel}-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
   };
 
@@ -878,7 +926,7 @@ const CRMDashboard = () => {
           </div>
 
           <nav className="hidden md:flex items-center gap-1 bg-atlas-card/60 p-1 rounded-full border border-white/[0.06]">
-            {(['overview', 'contacts', 'pipeline', 'add', 'audit'] as const).map(t => (
+            {(['overview', 'contacts', 'pipeline', 'add', 'notifications', 'audit'] as const).map(t => (
               <motion.button key={t} onClick={() => setTab(t)} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                 className={cn('px-5 py-2 rounded-full text-xs font-medium transition-all capitalize tracking-wide',
                   tab === t ? 'bg-atlas-primary text-white shadow-lg shadow-atlas-primary/20' : 'text-slate-400 hover:text-white hover:bg-white/5'
@@ -888,9 +936,34 @@ const CRMDashboard = () => {
           </nav>
 
           <div className="flex items-center gap-3">
-            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} onClick={exportCSV}
-              className="p-2 text-slate-500 hover:text-white transition-colors text-xs border border-white/[0.06] rounded-lg px-3 font-mono"
-            >↓ CSV</motion.button>
+            <div className="relative">
+              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} onClick={() => setShowCSVMenu(!showCSVMenu)}
+                className="p-2 text-slate-500 hover:text-white transition-colors text-xs border border-white/[0.06] rounded-lg px-3 font-mono flex items-center gap-2"
+              >↓ CSV <ChevronRight className={cn("h-3 w-3 transition-transform", showCSVMenu && "rotate-90")} /></motion.button>
+              <AnimatePresence>
+                {showCSVMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="absolute top-full right-0 mt-2 bg-atlas-card border border-white/[0.06] rounded-lg overflow-hidden shadow-xl z-50"
+                  >
+                    <button onClick={() => { exportCSV('all'); setShowCSVMenu(false); }} className="w-full text-left px-4 py-2 text-xs text-slate-300 hover:bg-white/5 hover:text-white transition-colors font-mono">
+                      📊 All Leads
+                    </button>
+                    <button onClick={() => { exportCSV('priority_access'); setShowCSVMenu(false); }} className="w-full text-left px-4 py-2 text-xs text-slate-300 hover:bg-white/5 hover:text-white transition-colors font-mono border-t border-white/[0.06]">
+                      📧 Priority Access
+                    </button>
+                    <button onClick={() => { exportCSV('waitlist'); setShowCSVMenu(false); }} className="w-full text-left px-4 py-2 text-xs text-slate-300 hover:bg-white/5 hover:text-white transition-colors font-mono border-t border-white/[0.06]">
+                      📋 Waitlist
+                    </button>
+                    <button onClick={() => { exportCSV('manual_add'); setShowCSVMenu(false); }} className="w-full text-left px-4 py-2 text-xs text-slate-300 hover:bg-white/5 hover:text-white transition-colors font-mono border-t border-white/[0.06]">
+                      ✋ Manual Entry
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
             <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} onClick={handleLogout}
               className="p-2 text-slate-500 hover:text-red-400 transition-colors text-xs border border-white/[0.06] rounded-lg px-3 font-mono"
             >Log Out</motion.button>
@@ -918,10 +991,10 @@ const CRMDashboard = () => {
             {tab === 'overview' && (
               <motion.div key="overview" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-8">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                  <StatCard label="Pipeline Value" value={fmtVal(totalValue)} change={leads.length > 0 ? 'Active' : 'Empty'} changeType="up" icon={TrendingUp} accent="linear-gradient(90deg,#10b981,transparent)" delay={0.05} />
-                  <StatCard label="Total Leads" value={String(leads.length)} change={leads.length > 0 ? `+${leads.length}` : '0'} changeType="up" icon={Users} accent="linear-gradient(90deg,#f97316,transparent)" delay={0.1} />
-                  <StatCard label="Closed Won" value={String(wonCount)} change={wonCount > 0 ? `${Math.round(wonCount / Math.max(leads.length, 1) * 100)}% rate` : '0%'} changeType="up" icon={CheckCircle2} accent="linear-gradient(90deg,#10b981,transparent)" delay={0.15} />
-                  <StatCard label="Avg Risk Score" value={String(avgRisk)} change={avgRisk >= 7 ? 'CRITICAL' : avgRisk >= 4 ? 'MODERATE' : 'LOW'} changeType={avgRisk >= 7 ? 'warn' : 'up'} icon={ShieldAlert} accent="linear-gradient(90deg,#ef4444,transparent)" delay={0.2} />
+                  <StatCard label="Pipeline Value" value={fmtVal(totalValue)} change={leads.length > 0 ? 'Active' : 'Empty'} changeType="up" icon={TrendingUp} accent="linear-gradient(90deg,#10b981,transparent)" delay={0.05} explanation="Total monetary value of all non-lost leads in your pipeline." />
+                  <StatCard label="Total Leads" value={String(leads.length)} change={leads.length > 0 ? `+${leads.length}` : '0'} changeType="up" icon={Users} accent="linear-gradient(90deg,#f97316,transparent)" delay={0.1} explanation="All leads across priority access, waitlist, and manual sources." />
+                  <StatCard label="Closed Won" value={String(wonCount)} change={wonCount > 0 ? `${Math.round(wonCount / Math.max(leads.length, 1) * 100)}%` : '0%'} changeType="up" icon={CheckCircle2} accent="linear-gradient(90deg,#10b981,transparent)" delay={0.15} explanation="Deals successfully closed. Track win rate and conversion metrics." />
+                  <StatCard label="Avg Risk Score" value={String(avgRisk)} change={avgRisk >= 7 ? 'HIGH' : avgRisk >= 4 ? 'MED' : 'LOW'} changeType={avgRisk >= 7 ? 'warn' : 'up'} icon={ShieldAlert} accent="linear-gradient(90deg,#ef4444,transparent)" delay={0.2} explanation="Risk based on missing data, tool usage, and engagement stage." />
                 </div>
 
                 {/* NEW: Dedicated Metric Cards for Priority Access & Waitlist */}
@@ -1003,7 +1076,7 @@ const CRMDashboard = () => {
                           <CartesianGrid strokeDasharray="3 3" stroke="#ffffff04" vertical={false} />
                           <XAxis dataKey="name" stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
                           <YAxis stroke="#475569" fontSize={10} tickLine={false} axisLine={false} allowDecimals={false} />
-                          <Tooltip contentStyle={{ backgroundColor: '#0a0f24', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', fontFamily: 'monospace', fontSize: '11px' }} />
+                          <Tooltip content={<PipelineTooltip />} />
                           <Bar dataKey="value" radius={[6, 6, 0, 0]}>
                             {growthData.map((entry, i) => (
                               <Cell key={i} fill={`url(#grad-${PIPELINE_STAGES[i]})`} />
@@ -1052,7 +1125,7 @@ const CRMDashboard = () => {
                           <CartesianGrid strokeDasharray="3 3" stroke="#ffffff04" horizontal={false} />
                           <XAxis type="number" stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
                           <YAxis dataKey="name" type="category" stroke="#475569" fontSize={9} tickLine={false} axisLine={false} width={80} />
-                          <Tooltip contentStyle={{ backgroundColor: '#0a0f24', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', fontFamily: 'monospace', fontSize: '11px' }} />
+                          <Tooltip content={<PipelineTooltip />} />
                           <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                             {(sourceData.length ? sourceData : [{ name: 'No Data', value: 1 }]).map((_, i) => (
                               <Cell key={i} fill={i % 2 === 0 ? '#f97316' : '#7c3aed'} />
@@ -1274,6 +1347,72 @@ const CRMDashboard = () => {
             {tab === 'audit' && (
               <motion.div key="audit" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }}>
                 <ForensicAuditView leads={leads} />
+              </motion.div>
+            )}
+
+            {/* NOTIFICATIONS */}
+            {tab === 'notifications' && (
+              <motion.div key="notifications" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-white font-display mb-1">Notifications & Updates</h2>
+                  <p className="text-slate-400 text-sm">Track follow-ups, email replies, and status changes in real-time</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  <div className="glass-card p-5 border-l-4 border-l-blue-500">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs uppercase tracking-wider text-blue-400 font-bold">Pending Follow-ups</p>
+                      <Mail className="h-4 w-4 text-blue-400" />
+                    </div>
+                    <p className="text-3xl font-black text-white">{leads.filter(l => ['Contacted', 'Proposal'].includes(l.stage)).length}</p>
+                    <p className="text-xs text-slate-500 mt-2">Leads awaiting next step</p>
+                  </div>
+
+                  <div className="glass-card p-5 border-l-4 border-l-green-500">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs uppercase tracking-wider text-green-400 font-bold">Active Deals</p>
+                      <CheckCircle2 className="h-4 w-4 text-green-400" />
+                    </div>
+                    <p className="text-3xl font-black text-white">{leads.filter(l => ['Proposal', 'Negotiation'].includes(l.stage)).length}</p>
+                    <p className="text-xs text-slate-500 mt-2">In active negotiation</p>
+                  </div>
+
+                  <div className="glass-card p-5 border-l-4 border-l-red-500">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs uppercase tracking-wider text-red-400 font-bold">Lost Leads</p>
+                      <XCircle className="h-4 w-4 text-red-400" />
+                    </div>
+                    <p className="text-3xl font-black text-white">{leads.filter(l => l.stage === 'Lost').length}</p>
+                    <p className="text-xs text-slate-500 mt-2">Disqualified pipeline</p>
+                  </div>
+                </div>
+
+                <div className="glass-card p-6">
+                  <h3 className="text-base font-bold text-white mb-6 flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-atlas-primary" />
+                    Recent Lead Updates
+                  </h3>
+                  <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                    {leads.slice(0, 10).map((lead, idx) => (
+                      <motion.div
+                        key={idx}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: idx * 0.05 }}
+                        className="p-4 bg-white/[0.02] rounded-lg border border-white/5 hover:border-atlas-primary/30 transition-colors cursor-pointer"
+                        onClick={() => { setSelectedLead(lead); setTab('contacts'); }}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-white">{lead.name}</p>
+                            <p className="text-xs text-slate-500">{lead.company}</p>
+                          </div>
+                          <StagePill stage={lead.stage} />
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
               </motion.div>
             )}
 
