@@ -96,7 +96,11 @@ function initials(name: string): string {
 async function fetchLeads(): Promise<Lead[]> {
   try {
     console.log('🔄 Fetching leads from API...');
-    const res = await fetch('/api/fetch-leads');
+    // Use Vercel domain for API calls in production, localhost for development
+    const apiUrl = process.env.NODE_ENV === 'development'
+      ? '/api/fetch-leads'
+      : 'https://atlas-synapse-crm.vercel.app/api/fetch-leads';
+    const res = await fetch(apiUrl);
 
     if (!res.ok) {
       console.error('API error:', res.status, await res.text());
