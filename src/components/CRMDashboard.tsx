@@ -776,6 +776,19 @@ const CRMDashboard = () => {
   const wonCount = leads.filter(l => l.stage === 'Won').length;
   const avgRisk = leads.length ? Math.round(leads.reduce((a, l) => a + (l.risk_score ?? calcRisk(l)), 0) / leads.length * 10) / 10 : 0;
 
+  // Lead source breakdown
+  const sourceBreakdown = leads.reduce((acc: Record<string, number>, l) => {
+    const source = l.source || 'other';
+    acc[source] = (acc[source] || 0) + 1;
+    return acc;
+  }, {});
+  const sourceBreakdownData = [
+    { name: 'Priority Access', value: sourceBreakdown.priority_access || 0, fill: '#3b82f6' },
+    { name: 'Waitlist', value: sourceBreakdown.waitlist || 0, fill: '#10b981' },
+    { name: 'Manual Entry', value: sourceBreakdown.manual_add || 0, fill: '#a855f7' },
+    { name: 'Other', value: sourceBreakdown.other || 0, fill: '#64748b' },
+  ].filter(s => s.value > 0);
+
   const growthData = PIPELINE_STAGES.map(s => ({ name: s, value: leads.filter(l => l.stage === s).length }));
   const sourceData = Object.entries(
     leads.reduce((acc: Record<string, number>, l) => { const k = l.industry || 'Other'; acc[k] = (acc[k] || 0) + 1; return acc; }, {})
@@ -923,6 +936,36 @@ const CRMDashboard = () => {
                     </div>
                   </div>
 
+                  <div className="glass-card p-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="text-base font-bold text-white">Leads by Source</h3>
+                    </div>
+                    {sourceBreakdownData.length > 0 ? (
+                      <div className="space-y-3">
+                        {sourceBreakdownData.map((source) => (
+                          <div key={source.name} className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: source.fill }} />
+                              <span className="text-xs text-slate-300">{source.name}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-white">{source.value}</span>
+                              <span className="text-[10px] text-slate-500">
+                                {leads.length > 0 && `${Math.round((source.value / leads.length) * 100)}%`}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="h-[260px] flex items-center justify-center text-slate-600 text-sm">
+                        No leads yet
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
                   <div className="glass-card p-6">
                     <h3 className="text-base font-bold text-white mb-6">Leads by Industry</h3>
                     <div className="h-[260px]">

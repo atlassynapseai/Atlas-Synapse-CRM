@@ -1,17 +1,24 @@
-import { VercelRequest, VercelResponse } from '@vercel/node';
+import express from 'express';
 import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+import path from 'path';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+// Load environment variables
+dotenv.config();
 
+const app = express();
+const PORT = parseInt(process.env.PORT || '5000', 10);
+
+// Middleware
+app.use(express.json());
+
+// API Routes
+app.get('/api/fetch-leads', async (req, res) => {
   try {
-    const supabaseUrl = process.env.VITE_SUPABASE_URL;
-    const supabaseServiceRoleKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !supabaseServiceRoleKey) {
-      console.error('[ERROR] Missing Supabase credentials');
       return res.status(500).json({ error: 'Missing Supabase credentials' });
     }
 
@@ -19,6 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const tables = ['leads', 'priority_access', 'waitlist', 'requests', 'request_priority_access'];
     const allLeads: any[] = [];
+    const debug: Record<string, number> = {};
 
     // Fetch from all tables
     for (const table of tables) {
@@ -29,11 +37,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .order('created_at', { ascending: false });
 
         if (error) {
-          console.error(`[ERROR] Table ${table}:`, error);
-          continue;
-        }
-
-        if (data) {
+          console.error(`Error fetching from ${table}:`, error.message);
+          debug[table] = 0;
+        } else if (data) {
+          debug[table] = data.length;
           const sourceMap: Record<string, string> = {
             leads: 'manual_add',
             priority_access: 'priority_access',
@@ -51,7 +58,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           allLeads.push(...leadsWithSource);
         }
       } catch (err) {
-        console.error(`[ERROR] Exception fetching from table ${table}:`, err);
+        console.error(`Error fetching from table ${table}:`, err);
+        debug[table] = -1;
       }
     }
 
@@ -70,10 +78,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
 
-    console.log(`[SUCCESS] Fetched ${sorted.length} leads`);
-    return res.status(200).json({ leads: sorted });
+    return res.status(200).json({ leads: sorted, debug });
   } catch (error) {
-    console.error('[ERROR] Unexpected error fetching leads:', error);
+    console.error('Error fetching leads:', error);
     return res.status(500).json({ error: 'Failed to fetch leads' });
   }
-}
+});
+
+// Serve static files from dist (for production)
+app.use(express.static(path.join(__dirname, 'dist')));
+
+// Serve frontend on all other routes (SPA fallback)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
