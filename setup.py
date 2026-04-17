@@ -165,22 +165,14 @@ def setup_supabase_tables(supabase_url, service_key):
 def setup_vercel_env(env_vars):
     """Set Vercel environment variables"""
     print("\n🔑 Setting Vercel environment variables...")
+    print("⚠️  Please set these manually in Vercel dashboard or using:")
+    print("   vercel env add <KEY> <VALUE>\n")
 
-    for key, value in env_vars.items():
-        # Use os.environ to pass secrets securely (not in command string)
-        env = os.environ.copy()
-        env['_VERCEL_ENV_VALUE'] = value
-        cmd = f'vercel env add {key} "${{_VERCEL_ENV_VALUE}}" --yes 2>/dev/null'
+    for key in env_vars.keys():
+        # Don't store or process values in Python - user should configure manually
+        print(f"  • {key}")
 
-        try:
-            # Run with restricted shell to prevent value leakage
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, env=env, timeout=30)
-            if result.returncode == 0:
-                print(f"  ✅ {key}")
-            else:
-                print(f"  ⚠️  {key} (may need manual setup)")
-        except subprocess.TimeoutExpired:
-            print(f"  ⚠️  {key} (timeout)")
+    print("\n✅ Environment variables info printed")
 
 def deploy_vercel():
     """Deploy to Vercel"""
