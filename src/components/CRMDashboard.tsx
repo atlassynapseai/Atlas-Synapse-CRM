@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { toast } from 'sonner';
 import {
   ShieldAlert, ShieldCheck, AlertTriangle, Scale, Database, Activity,
   ChevronRight, Lock, Search, Users, TrendingUp, Briefcase, Mail,
@@ -863,7 +864,6 @@ const CRMDashboard = () => {
   const [search, setSearch] = useState('');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'priority_access' | 'manual_add' | 'waitlist'>('all');
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [showCSVMenu, setShowCSVMenu] = useState(false);
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
 
@@ -911,8 +911,13 @@ const CRMDashboard = () => {
             setLeads(data);
 
             if (payload.eventType === 'INSERT') {
+              const name = payload.new.name || payload.new.first_name || 'New Lead';
+              const company = payload.new.company || 'Unknown Company';
               console.log(`✨ New entry in ${table}`);
-              showToast(`New ${table} entry received!`, 'success');
+              toast.success(`🎉 New Lead: ${name}`, {
+                description: `Added from ${company}`,
+                duration: 5000,
+              });
             }
           }
         )
@@ -921,9 +926,28 @@ const CRMDashboard = () => {
         })
     );
 
+    // Subscribe to email messages for reply notifications
+    const emailSub = supabase
+      .channel('email-messages-changes')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'email_messages' },
+        async (payload: any) => {
+          const message = payload.new;
+          if (message.is_reply) {
+            toast.info(`📧 New Reply`, {
+              description: `${message.from_email} replied`,
+              duration: 5000,
+            });
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       console.log('🛑 Cleaning up subscriptions');
       subscriptions.forEach(sub => sub.unsubscribe());
+      emailSub.unsubscribe();
     };
   }, []);
 
@@ -932,8 +956,13 @@ const CRMDashboard = () => {
   };
 
   const showToast = (message: string, type: 'success' | 'error' | 'info') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    if (type === 'success') {
+      toast.success(message, { duration: 4000 });
+    } else if (type === 'error') {
+      toast.error(message, { duration: 4000 });
+    } else {
+      toast.info(message, { duration: 4000 });
+    }
   };
 
   const filtered = leads.filter(l => {
@@ -1021,11 +1050,6 @@ const CRMDashboard = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* TOAST NOTIFICATIONS */}
-      <AnimatePresence>
-        {toast && <Toast message={toast.message} type={toast.type} />}
-      </AnimatePresence>
-
       {/* HEADER */}
       <header className="border-b border-white/[0.06] bg-atlas-bg/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">

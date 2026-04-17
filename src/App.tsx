@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { motion } from 'motion/react';
 import { Lock, LogOut } from 'lucide-react';
+import { Toaster } from 'sonner';
 import { supabase } from './lib/supabase';
 import CRMDashboard from './components/CRMDashboard';
 import Auth from './components/Auth';
@@ -128,7 +129,12 @@ function App() {
   }
 
   // Authorized - show dashboard
-  return <CRMDashboard />;
+  return (
+    <>
+      <Toaster position="top-right" theme="dark" />
+      <CRMDashboard />
+    </>
+  );
 }
 
 export default App;
