@@ -162,18 +162,6 @@ def setup_supabase_tables(supabase_url, service_key):
 
     print("✅ Supabase tables setup complete")
 
-def setup_vercel_env(env_vars):
-    """Set Vercel environment variables"""
-    print("\n🔑 Setting Vercel environment variables...")
-    print("⚠️  Please set these manually in Vercel dashboard or using:")
-    print("   vercel env add <KEY> <VALUE>\n")
-
-    for key in env_vars.keys():
-        # Don't store or process values in Python - user should configure manually
-        print(f"  • {key}")
-
-    print("\n✅ Environment variables info printed")
-
 def deploy_vercel():
     """Deploy to Vercel"""
     print("\n🚀 Deploying to Vercel...")
@@ -199,14 +187,12 @@ def main():
     # Setup
     setup_supabase_tables(supabase_url, supabase_service_key)
 
-    env_vars = {
-        "VITE_SUPABASE_URL": supabase_url,
-        "VITE_SUPABASE_ANON_KEY": supabase_anon_key,
-        "VITE_SUPABASE_SERVICE_ROLE_KEY": supabase_service_key,
-        "GEMINI_API_KEY": gemini_api_key,
-    }
-
-    setup_vercel_env(env_vars)
+    print("\n🔑 Environment Variables Setup")
+    print("Configure these in Vercel dashboard or using:")
+    print("   vercel env add VITE_SUPABASE_URL <value>")
+    print("   vercel env add VITE_SUPABASE_ANON_KEY <value>")
+    print("   vercel env add VITE_SUPABASE_SERVICE_ROLE_KEY <value>")
+    print("   vercel env add GEMINI_API_KEY <value>")
 
     # Deploy
     should_deploy = input("\n🚀 Deploy to Vercel now? (y/n): ").strip().lower()
