@@ -924,10 +924,10 @@ const CRMDashboard = () => {
                       <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">Priority Access</h4>
                       <Briefcase className="h-5 w-5 text-blue-400" />
                     </div>
-                    <div className="text-4xl font-black text-blue-400 mb-2">{sourceBreakdown.priority_access_requests || 0}</div>
+                    <div className="text-4xl font-black text-blue-400 mb-2">{sourceBreakdown.priority_access || 0}</div>
                     <div className="text-xs text-slate-400">requests pending</div>
                     <div className="text-xs text-slate-500 mt-2">
-                      {leads.length > 0 && `${Math.round(((sourceBreakdown.priority_access_requests || 0) / leads.length) * 100)}% of total`}
+                      {leads.length > 0 && `${Math.round(((sourceBreakdown.priority_access || 0) / leads.length) * 100)}% of total`}
                     </div>
                   </motion.div>
 
@@ -942,10 +942,10 @@ const CRMDashboard = () => {
                       <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">Waitlist</h4>
                       <Users className="h-5 w-5 text-green-400" />
                     </div>
-                    <div className="text-4xl font-black text-green-400 mb-2">{sourceBreakdown.waitlist_signups || 0}</div>
+                    <div className="text-4xl font-black text-green-400 mb-2">{sourceBreakdown.waitlist || 0}</div>
                     <div className="text-xs text-slate-400">signups queued</div>
                     <div className="text-xs text-slate-500 mt-2">
-                      {leads.length > 0 && `${Math.round(((sourceBreakdown.waitlist_signups || 0) / leads.length) * 100)}% of total`}
+                      {leads.length > 0 && `${Math.round(((sourceBreakdown.waitlist || 0) / leads.length) * 100)}% of total`}
                     </div>
                   </motion.div>
 
