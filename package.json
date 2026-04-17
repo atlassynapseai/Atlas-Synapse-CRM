@@ -13,6 +13,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.90.0",
     "@getbrevo/brevo": "^5.0.4",
     "@google/genai": "^1.29.0",
     "@supabase/supabase-js": "^2.103.0",
@@ -27,6 +28,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "recharts": "^3.8.0",
+    "simple-statistics": "^7.8.9",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "vite": "^6.2.0"

@@ -16,6 +16,7 @@ import {
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { AdvancedAnalytics, ActivityTimeline, BulkActions, SkeletonCard, LeadComparison } from './AdvancedFeatures';
+import { AIInsights } from './AIInsights';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -1137,6 +1138,9 @@ const CRMDashboard = () => {
                   <StatCard label="Closed Won" value={String(wonCount)} change={wonCount > 0 ? `${Math.round(wonCount / Math.max(leads.length, 1) * 100)}%` : '0%'} changeType="up" icon={CheckCircle2} accent="linear-gradient(90deg,#10b981,transparent)" delay={0.15} explanation="Deals successfully closed. Track win rate and conversion metrics." />
                   <StatCard label="Avg Risk Score" value={String(avgRisk)} change={avgRisk >= 7 ? 'HIGH' : avgRisk >= 4 ? 'MED' : 'LOW'} changeType={avgRisk >= 7 ? 'warn' : 'up'} icon={ShieldAlert} accent="linear-gradient(90deg,#ef4444,transparent)" delay={0.2} explanation="Risk based on missing data, tool usage, and engagement stage." />
                 </div>
+
+                {/* AI-POWERED INSIGHTS */}
+                <AIInsights leads={leads} />
 
                 {/* NEW: Dedicated Metric Cards for Priority Access & Waitlist */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
