@@ -4,10 +4,10 @@
   "devCommand": "npm run dev",
   "outputDirectory": "dist",
   "framework": "vite",
-  "rewrites": [
+  "crons": [
     {
-      "source": "/",
-      "destination": "/Atlas-Synapse-CRM/"
+      "path": "/api/gmail-poll",
+      "schedule": "0 9 * * *"
     }
   ]
 }
