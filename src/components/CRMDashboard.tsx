@@ -1506,6 +1506,23 @@ const CRMDashboard = () => {
 
                 <div className="glass-card p-6">
                   <h3 className="text-base font-bold text-white mb-6 flex items-center gap-2">
+                    <Mail className="h-5 w-5 text-green-400" />
+                    📨 Email Replies
+                    <span className="ml-auto px-2 py-1 rounded-full text-xs bg-green-500/10 text-green-400 border border-green-500/20 font-bold">Coming Soon</span>
+                  </h3>
+                  <div className="text-sm text-slate-400 p-4 bg-white/[0.02] rounded-lg border border-white/5">
+                    📬 Email reply notifications will appear here once a contact responds to Gloria's messages.
+                    <br /><br />
+                    <span className="text-xs text-slate-500">To set up: Configure Brevo webhooks to send reply events to:</span>
+                    <br />
+                    <code className="text-xs bg-atlas-bg px-2 py-1 rounded mt-2 block text-blue-400 font-mono">
+                      {typeof window !== 'undefined' ? `${window.location.origin}/api/brevo-webhook` : 'https://yourdomain.com/api/brevo-webhook'}
+                    </code>
+                  </div>
+                </div>
+
+                <div className="glass-card p-6">
+                  <h3 className="text-base font-bold text-white mb-6 flex items-center gap-2">
                     <Activity className="h-5 w-5 text-atlas-primary" />
                     Recent Lead Updates
                   </h3>
